@@ -884,6 +884,25 @@ function initEventListeners() {
     window.addEventListener('pagehide', handleQuizBeforeUnload);
 }
 
+// Função de logout
+function logout() {
+    // Se não houver usuário, apenas mostra a tela de login
+    if (!auth.currentUser) {
+        showAuth();
+        return;
+    }
+    hideLoading();
+    auth.signOut()
+        .then(() => {
+            currentUser = null;
+            showAuth();
+        })
+        .catch(error => {
+            console.error('Erro ao fazer logout:', error);
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}
+
 // Inicializar listeners de pesquisa
 function initSearchListeners() {
     // Pesquisa no Ranking Geral
