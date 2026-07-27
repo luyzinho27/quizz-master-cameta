@@ -639,7 +639,21 @@ function initAuth() {
     // Login com Google
     if (googleLoginBtn) {
         googleLoginBtn.addEventListener('click', () => {
-            signInWithGoogle();
+            const provider = new firebase.auth.GoogleAuthProvider();
+            auth.signInWithPopup(provider)
+                .then((result) => {
+                    ensureUserDocument(result.user)
+                        .then(() => {
+                            showSuccess('login-success', 'Login com Google bem-sucedido!');
+                            showDashboard();
+                        })
+                        .catch((error) => {
+                            showError('login-error', getAuthErrorMessage(error));
+                        });
+                })
+                .catch((error) => {
+                    showError('login-error', getAuthErrorMessage(error));
+                });
         });
     }
 
@@ -743,94 +757,37 @@ function switchAuthTab(tab) {
     }
 }
 
-// Registrar novo usuário
+// Funcao para cadastrar usuário
 function registerUser(event) {
-    // Initialize Firebase
-    const firebaseConfig = {
-        apiKey: 'YOUR_API_KEY',
-        authDomain: 'your-project-id.firebaseapp.com',
-        projectId: 'your-project-id',
-        storageBucket: 'your-project-id.appspot.com',
-        messagingSenderId: 'YOUR_SENDER_ID',
-        appId: 'YOUR_APP_ID'
-    };
-    firebase.initializeApp(firebaseConfig);
-
-    // Existing registration logic
+    event.preventDefault();
     const name = document.getElementById('register-name').value;
     const email = document.getElementById('register-email').value;
     const password = document.getElementById('register-password').value;
     const userType = document.getElementById('register-type').value;
 
-    // Add validation and error handling
     if (!name || !email || !password) {
-        document.getElementById('register-error').textContent = 'Preencha todos os campos';
+        showError('register-error', 'Por favor, preencha todos os campos.');
         return;
     }
 
-    // Firebase registration
-    firebase.auth().createUserWithEmailAndPassword(email, password)
-        .then(() => {
-            // Save user data to Firestore
-            const userRef = firebase.firestore().collection('users').doc(email);
-            userRef.set({
-                name: name,
-                type: userType,
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
-            });
-            // Redirect or show success message
-            window.location.href = 'dashboard.html';
-        })
-        .catch((error) => {
-            document.getElementById('register-error').textContent = error.message;
-        });
-}
-
-// ...existing code...
-
-    event.preventDefault(); // Prevenir submissão padrão do formulário
-    const form = document.getElementById('register-form');
-    const name = form.elements['register-name'].value.trim();
-    const email = form.elements['register-email'].value.trim();
-    const password = form.elements['register-password'].value;
-    const userType = form.elements['register-type'].value;
-
-    if (!name || !email || !password) {
-        showError('register-error', 'Preencha todos os campos obrigatórios');
-        return;
-    }
-
-    // Validação de email
-    if (!email.includes('@') || !email.includes('.')) {
-        showError('register-error', 'E-mail inválido');
-        return;
-    }
-
-    // Validação de senha (mínimo 8 caracteres)
-    if (password.length < 8) {
-        showError('register-error', 'Senha deve ter pelo menos 8 caracteres');
-        return;
-    }
-
-    firebase.auth().createUserWithEmailAndPassword(email, password)
+    auth.createUserWithEmailAndPassword(email, password)
         .then((userCredential) => {
-            const userRef = firebase.firestore().collection('users').doc(userCredential.user.uid);
-            userRef.set({
+            // Atualizar tipo de usuário no Firestore
+            db.collection('users').doc(userCredential.user.uid).set({
                 name: name,
-                email: email,
-                role: userType,
-                status: 'active',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                userType: userType,
+                status: 'active'
             })
             .then(() => {
-                window.location.href = '/dashboard.html';
+                showSuccess('register-success', 'Cadastro realizado com sucesso!');
+                switchAuthTab('login');
             })
             .catch((error) => {
-                showError('register-error', error.message);
+                showError('register-error', getAuthErrorMessage(error));
             });
         })
         .catch((error) => {
-            showError('register-error', error.message);
+            showError('register-error', getAuthErrorMessage(error));
         });
 }
 
