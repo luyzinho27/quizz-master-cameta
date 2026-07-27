@@ -801,7 +801,14 @@ function registerUser(event) {
             console.log('Registro tentando:', {name, email, password, userType});
 console.log('Firebase configurado:', firebase.apps.length > 0);
 console.log('Registro tentando:', {name, email, password, userType});
+console.log('Registro tentando:', {name, email, password, userType});
+console.log('Firebase configurado:', firebase.apps.length > 0);
+console.log('Registro tentando:', {name, email, password, userType});
+console.log('Firebase configurado:', firebase.apps.length > 0);
 showError('register-error', 'Erro ao criar conta: ' + error.code + ' - ' + error.message);
+console.log('Erro de Firebase:', error);
+console.log('Detalhes do erro:', error);
+console.log('Erro de Firebase:', error);
         });
 }
 
