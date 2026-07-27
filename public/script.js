@@ -183,62 +183,9 @@ function syncQuizProgress(force = false) {
     updateUserQuizProgress();
 }
 
-function handleQuizGuardedEvent(event) {
-    if (!quizActive) return;
-    event.preventDefault();
-    event.stopPropagation();
-}
-
-function handleQuizKeydown(event) {
-    if (!quizActive) return;
-    const key = (event.key || '').toLowerCase();
-    const isModifierBlocked = (event.ctrlKey || event.metaKey) && ['a', 'c', 'x', 's', 'p'].includes(key);
-    const isPrintCommand = (event.ctrlKey || event.metaKey) && key === 'p';
-    const isPrintScreen = event.key === 'PrintScreen';
-    if (isModifierBlocked || isPrintScreen) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    if (isPrintCommand || isPrintScreen) {
-        showQuizShield();
-    }
-}
-
-function isQuizShieldEnabled() {
-    return quizActive && currentUser && currentUser.userType === 'aluno';
-}
-
-function showQuizShield(durationMs = QUIZ_SHIELD_DURATION_MS) {
-    if (!isQuizShieldEnabled()) return;
-    if (quizShieldTimer) {
-        clearTimeout(quizShieldTimer);
-        quizShieldTimer = null;
-    }
-    document.body.classList.add('quiz-shield-active');
-    if (quizScreenshotShield) {
-        quizScreenshotShield.classList.remove('hidden');
-    }
-    if (durationMs > 0) {
-        quizShieldTimer = setTimeout(() => {
-            hideQuizShield();
-        }, durationMs);
-    }
-}
-
-function hideQuizShield() {
-    if (quizShieldTimer) {
-        clearTimeout(quizShieldTimer);
-        quizShieldTimer = null;
-    }
-    document.body.classList.remove('quiz-shield-active');
-    if (quizScreenshotShield) {
-        quizScreenshotShield.classList.add('hidden');
-    }
-}
-
-function handleQuizBeforePrint() {
-    showQuizShield();
-}
+// A função registerUser foi removida para evitar duplicidade e erros. O fluxo de registro
+// agora é tratado pelo listener de submit do formulário definido em initAuth().
+//}
 
 function handleQuizAfterPrint() {
     hideQuizShield();
@@ -2597,83 +2544,8 @@ function loadReviewData(userQuizId, quizId) {
 
 // Quiz creation functions
 
-function createQuiz() {
-  const roomId = currentRoom;
-  const title = document.getElementById('quiz-title').value.trim();
-  const questions = getQuestionsFromForm();
-
-  if (!title) {
-    alert('Por favor, insira um título para o quiz.');
-    return;
-  }
-
-  Rooms.createQuiz(roomId, title, questions)
-    .then(() => {
-      alert('Quiz criado com sucesso!');
-      document.getElementById('quiz-title').value = '';
-      document.getElementById('questions-container').innerHTML = '';
-    })
-    .catch((error) => {
-      console.error('Error creating quiz:', error);
-      alert('Erro ao criar quiz: ' + error.message);
-    });
-}
-
-// Function to collect questions from form inputs
-function getQuestionsFromForm() {
-  const questions = [];
-  const questionElements = document.querySelectorAll('.question');
-  questionElements.forEach((question, index) => {
-    const text = question.querySelector('.question-text').value;
-    const options = Array.from(question.querySelectorAll('.option'))
-      .map(option => option.value);
-    const correctAnswer = question.querySelector('.correct-answer').value;
-
-    if (text && options.length > 1 && correctAnswer) {
-      questions.push({
-        text,
-        options,
-        correctAnswer,
-        index
-      });
-    }
-  });
-
-  return questions;
-}
-
-// Add event listener for quiz creation
-document.getElementById('create-quiz-btn')?.addEventListener('click', createQuiz);
+// The room and quiz creation logic that depended on the removed Rooms module has been
+// removed. If room management is required, a new implementation should be added.
 
 // Function to add student to room
-function addStudentToRoom(roomId, studentId) {
-  Rooms.addStudentToRoom(roomId, studentId)
-    .then(() => {
-      alert('Aluno adicionado à sala com sucesso!');
-      fetchRoomDetails(roomId);
-    })
-    .catch((error) => {
-      console.error('Error adding student to room:', error);
-      alert('Erro ao adicionar aluno à sala: ' + error.message);
-    });
-}
-
-// Example of fetching and displaying rankings
-function fetchRankings(roomId) {
-  // Implement Firebase query to get user scores in the room
-  // Then display in the rankings section
-}
-
-// Attach event listeners for room actions
-function attachRoomActionListeners() {
-  document.querySelectorAll('.add-student-btn').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      const roomId = e.target.dataset.roomid;
-      const studentId = prompt('Enter student ID to add:');
-      addStudentToRoom(roomId, studentId);
-    });
-  });
-}
-
-// Call the function to attach listeners when page loads
-window.addEventListener('DOMContentLoaded', attachRoomActionListeners);
+// Room management functionality has been removed. If needed, reimplement here.
