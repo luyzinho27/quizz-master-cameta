@@ -772,22 +772,36 @@ function registerUser(event) {
 
     auth.createUserWithEmailAndPassword(email, password)
         .then((userCredential) => {
-            // Atualizar tipo de usuário no Firestore
-            db.collection('users').doc(userCredential.user.uid).set({
-                name: name,
-                userType: userType,
-                status: 'active'
-            })
-            .then(() => {
-                showSuccess('register-success', 'Cadastro realizado com sucesso!');
-                switchAuthTab('login');
-            })
-            .catch((error) => {
-                showError('register-error', getAuthErrorMessage(error));
-            });
+            // Verificar se o email já existe
+            db.collection('users').where('email', '==', email).get()
+                .then(querySnapshot => {
+                    if (querySnapshot.empty) {
+                        // Criar novo usuário se não existir
+                        db.collection('users').doc(userCredential.user.uid).set({
+                            name: name,
+                            userType: userType,
+                            status: 'active'
+                        })
+                        .then(() => {
+                            showSuccess('register-success', 'Cadastro realizado com sucesso!');
+                            switchAuthTab('login');
+                        })
+                        .catch((error) => {
+                            showError('register-error', 'Erro ao salvar dados do usuário: ' + error.message);
+                        });
+                    } else {
+                        showError('register-error', 'Já existe um usuário com esse e-mail');
+                    }
+                })
+                .catch((error) => {
+                    showError('register-error', 'Erro ao verificar e-mail existente: ' + error.message);
+                });
         })
         .catch((error) => {
-            showError('register-error', getAuthErrorMessage(error));
+            console.log('Registro tentando:', {name, email, password, userType});
+console.log('Firebase configurado:', firebase.apps.length > 0);
+console.log('Registro tentando:', {name, email, password, userType});
+showError('register-error', 'Erro ao criar conta: ' + error.code + ' - ' + error.message);
         });
 }
 
