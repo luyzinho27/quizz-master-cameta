@@ -1,66 +1,7 @@
-/// <reference path="users.js" />
-/// <reference path="rooms.js" />
-
-// Firebase Initialization
-const firebaseConfig = {
-  apiKey: "NEW_API_KEY",
-  authDomain: "quizz-master-cameta.firebaseapp.com",
-  projectId: "quizz-master-cameta",
-  storageBucket: "quizz-master-cameta.appspot.com",
-  messagingSenderId: "NEW_SENDER_ID",
-  appId: "NEW_APP_ID"
-};
-
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}
-
-// Global variables
-let currentRoom = null;
-
-// Authentication handling
-function checkAuth() {
-  firebase.auth().onAuthStateChanged(user => {
-    if (user) {
-      // User is signed in
-      const userRole = getRole(user.uid);
-      if (userRole === Users.Admin || userRole === Users.Professor) {
-        // Show admin/teacher dashboard
-        document.getElementById('admin-dashboard').classList.remove('hidden');
-        document.getElementById('student-dashboard').classList.add('hidden');
-      } else {
-        // Show student dashboard
-        document.getElementById('student-dashboard').classList.remove('hidden');
-        document.getElementById('admin-dashboard').classList.add('hidden');
-      }
-    } else {
-      // User is signed out
-      document.getElementById('auth-container').classList.remove('hidden');
-      document.getElementById('admin-dashboard').classList.add('hidden');
-      document.getElementById('student-dashboard').classList.add('hidden');
-    }
-  });
-}
-
-// Get user role from Firestore
-async function getRole(uid) {
-  const userDoc = await firebase.firestore().collection('users').doc(uid).get();
-  return userDoc.data().role;
-}
-
-// Add event listeners
-window.addEventListener('DOMContentLoaded', () => {
-  checkAuth();
-  fetchRooms();
-  // Add event listeners for room management
-  document.getElementById('create-room-btn')?.addEventListener('click', createRoom);
-  // Add event listeners for other functions
-});
-
 // Configuração do Firebase
 function resolveFirebaseConfig() {
-    const candidate = window.QUIZ_MASTER_FIREBASE_CONFIG;
-    if (candidate && typeof candidate === 'object') {
+    const candidate = window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG;
+  if (candidate && typeof candidate === 'object') {
         return candidate;
     }
 
@@ -71,7 +12,7 @@ function resolveFirebaseConfig() {
     }
 
     return null;
-}
+};
 
 const firebaseConfig = resolveFirebaseConfig();
 

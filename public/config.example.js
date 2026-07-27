@@ -1,4 +1,4 @@
-window.QUIZ_MASTER_FIREBASE_CONFIG = {
+window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG = {
   apiKey: 'SUA_API_KEY',
   authDomain: 'SEU_PROJETO.firebaseapp.com',
   projectId: 'SEU_PROJETO',
