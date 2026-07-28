@@ -6,6 +6,17 @@ if (window.__quizMasterScriptLoaded) {
 window.__quizMasterScriptLoaded = true;
 
 console.log('script.js carregado');
+// Indicador visual de carregamento
+const statusDiv = document.createElement('div');
+statusDiv.id = 'script-status';
+statusDiv.style.position = 'fixed';
+statusDiv.style.bottom = '0';
+statusDiv.style.right = '0';
+statusDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
+statusDiv.style.color = 'white';
+statusDiv.style.padding = '5px';
+statusDiv.textContent = 'script.js carregado';
+document.body.appendChild(statusDiv);
 // Configuração do Firebase
 window.onerror = function(msg, url, lineNo, columnNo, error) {
     console.error('Global error:', msg, url, lineNo, columnNo, error);
