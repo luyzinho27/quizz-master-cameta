@@ -16,6 +16,11 @@ function resolveFirebaseConfig() {
 
 const firebaseConfig = resolveFirebaseConfig();
 
+// Log de depuração para verificar a configuração obtida
+console.log('Candidate config:', window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG);
+console.log('Legacy config:', window.firebaseConfig);
+console.log('Resolved firebaseConfig:', firebaseConfig);
+
 if (!firebaseConfig) {
     const message = 'Configuracao do Firebase ausente. Crie public/config.js a partir de public/config.example.js.';
     console.error(message);
