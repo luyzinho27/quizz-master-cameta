@@ -2561,6 +2561,29 @@ function loadReviewData(userQuizId, quizId) {
     });
 }
 
+function showDashboard() {
+    // Exibe o painel apropriado de acordo com o tipo de usuário
+    const userType = currentUser?.userType; // 'aluno', 'professor', 'admin', etc.
+
+    // Oculta todos os dashboards
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+
+    // Mostra o dashboard correto
+    if (userType === 'aluno') {
+        studentDashboard.classList.remove('hidden');
+    } else if (userType === 'professor') {
+        teacherDashboard.classList.remove('hidden');
+    } else if (userType === 'admin') {
+        adminDashboard.classList.remove('hidden');
+    }
+
+    // Atualiza a UI geral
+    authContainer.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+}
+
 // Quiz creation functions
 
 // The room and quiz creation logic that depended on the removed Rooms module has been
