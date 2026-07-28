@@ -1,3 +1,10 @@
+// Evita execução duplicada se o script já foi carregado
+if (window.__quizMasterScriptLoaded) {
+    console.warn('script.js já foi carregado anteriormente. Ignorando execução duplicada.');
+    return;
+}
+window.__quizMasterScriptLoaded = true;
+
 console.log('script.js carregado');
 // Configuração do Firebase
 window.onerror = function(msg, url, lineNo, columnNo, error) {
