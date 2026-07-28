@@ -903,6 +903,79 @@ function logout() {
         });
 }
 
+// Funções auxiliares de UI
+// Exibe o container de autenticação e oculta os dashboards e quizzes
+function showAuth() {
+    authContainer.classList.remove('hidden');
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+    quizResult.classList.add('hidden');
+}
+
+// Exibe o dashboard correspondente ao tipo de usuário logado
+function showDashboard() {
+    if (!currentUser) return;
+    authContainer.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+    quizResult.classList.add('hidden');
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+    if (currentUser.userType === 'aluno') {
+        studentDashboard.classList.remove('hidden');
+    } else if (currentUser.userType === 'professor') {
+        teacherDashboard.classList.remove('hidden');
+    } else if (currentUser.userType === 'admin') {
+        adminDashboard.classList.remove('hidden');
+    }
+}
+
+// Exibe uma mensagem de sucesso em um elemento com id fornecido
+function showSuccess(id, message) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+// Exibe uma mensagem de erro em um elemento com id fornecido
+function showError(id, message) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+// Traduz códigos de erro do Firebase Auth em mensagens amigáveis
+function getAuthErrorMessage(error) {
+    if (!error) return 'Erro desconhecido.';
+    if (error.code) {
+        switch (error.code) {
+            case 'auth/invalid-email':
+                return 'E‑mail inválido.';
+            case 'auth/user-disabled':
+                return 'Conta desativada.';
+            case 'auth/user-not-found':
+                return 'Usuário não encontrado.';
+            case 'auth/wrong-password':
+                return 'Senha incorreta.';
+            case 'auth/email-already-in-use':
+                return 'E‑mail já em uso.';
+            case 'auth/operation-not-allowed':
+                return 'Operação não permitida.';
+            case 'auth/weak-password':
+                return 'Senha fraca.';
+            default:
+                return error.message || 'Erro de autenticação.';
+        }
+    }
+    return error.message || 'Erro de autenticação.';
+}
+
 // Inicializar listeners de pesquisa
 function initSearchListeners() {
     // Pesquisa no Ranking Geral
