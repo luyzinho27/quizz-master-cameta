@@ -25,9 +25,11 @@ if (!firebaseConfig) {
 // Inicializar Firebase apenas se ainda não houver uma app inicializada
 if (!firebase.apps || firebase.apps.length === 0) {
     firebase.initializeApp(firebaseConfig);
+    console.log('Firebase inicializado com config:', firebaseConfig);
 } else {
     // Se já existir uma app, reutilizamos a existente para evitar erro de inicialização duplicada
     firebase.app();
+    console.log('Firebase já inicializado, reutilizando app existente');
 }
 const auth = firebase.auth();
 const db = firebase.firestore();
