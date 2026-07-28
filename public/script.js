@@ -1,3 +1,4 @@
+console.log('script.js carregado');
 // Configuração do Firebase
 function resolveFirebaseConfig() {
     const candidate = window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG;
