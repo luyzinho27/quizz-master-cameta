@@ -1,5 +1,8 @@
 console.log('script.js carregado');
 // Configuração do Firebase
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error('Global error:', msg, url, lineNo, columnNo, error);
+};
 function resolveFirebaseConfig() {
     const candidate = window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG;
   if (candidate && typeof candidate === 'object') {
