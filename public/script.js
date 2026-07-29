@@ -1,4 +1,26 @@
+// Evita execução duplicada se o script já foi carregado
+if (window.__quizMasterScriptLoaded) {
+    console.warn('script.js já foi carregado anteriormente. Ignorando execução duplicada.');
+    return;
+}
+window.__quizMasterScriptLoaded = true;
+
+console.log('script.js carregado');
+// Indicador visual de carregamento
+const statusDiv = document.createElement('div');
+statusDiv.id = 'script-status';
+statusDiv.style.position = 'fixed';
+statusDiv.style.bottom = '0';
+statusDiv.style.right = '0';
+statusDiv.style.backgroundColor = 'rgba(0,0,0,0.7)';
+statusDiv.style.color = 'white';
+statusDiv.style.padding = '5px';
+statusDiv.textContent = 'script.js carregado';
+document.body.appendChild(statusDiv);
 // Configuração do Firebase
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error('Global error:', msg, url, lineNo, columnNo, error);
+};
 function resolveFirebaseConfig() {
     const candidate = window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG;
   if (candidate && typeof candidate === 'object') {
@@ -16,14 +38,26 @@ function resolveFirebaseConfig() {
 
 const firebaseConfig = resolveFirebaseConfig();
 
+// Log de depuração para verificar a configuração obtida
+console.log('Candidate config:', window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG);
+console.log('Legacy config:', window.firebaseConfig);
+console.log('Resolved firebaseConfig:', firebaseConfig);
+
 if (!firebaseConfig) {
     const message = 'Configuracao do Firebase ausente. Crie public/config.js a partir de public/config.example.js.';
     console.error(message);
     throw new Error(message);
 }
 
-// Inicializar Firebase
-firebase.initializeApp(firebaseConfig);
+// Inicializar Firebase apenas se ainda não houver uma app inicializada
+if (!firebase.apps || firebase.apps.length === 0) {
+    firebase.initializeApp(firebaseConfig);
+    console.log('Firebase inicializado com config:', firebaseConfig);
+} else {
+    // Se já existir uma app, reutilizamos a existente para evitar erro de inicialização duplicada
+    firebase.app();
+    console.log('Firebase já inicializado, reutilizando app existente');
+}
 const auth = firebase.auth();
 const db = firebase.firestore();
 
@@ -901,6 +935,79 @@ function logout() {
             console.error('Erro ao fazer logout:', error);
             showError('login-error', getAuthErrorMessage(error));
         });
+}
+
+// Funções auxiliares de UI
+// Exibe o container de autenticação e oculta os dashboards e quizzes
+function showAuth() {
+    authContainer.classList.remove('hidden');
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+    quizResult.classList.add('hidden');
+}
+
+// Exibe o dashboard correspondente ao tipo de usuário logado
+function showDashboard() {
+    if (!currentUser) return;
+    authContainer.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+    quizResult.classList.add('hidden');
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+    if (currentUser.userType === 'aluno') {
+        studentDashboard.classList.remove('hidden');
+    } else if (currentUser.userType === 'professor') {
+        teacherDashboard.classList.remove('hidden');
+    } else if (currentUser.userType === 'admin') {
+        adminDashboard.classList.remove('hidden');
+    }
+}
+
+// Exibe uma mensagem de sucesso em um elemento com id fornecido
+function showSuccess(id, message) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+// Exibe uma mensagem de erro em um elemento com id fornecido
+function showError(id, message) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+}
+
+// Traduz códigos de erro do Firebase Auth em mensagens amigáveis
+function getAuthErrorMessage(error) {
+    if (!error) return 'Erro desconhecido.';
+    if (error.code) {
+        switch (error.code) {
+            case 'auth/invalid-email':
+                return 'E‑mail inválido.';
+            case 'auth/user-disabled':
+                return 'Conta desativada.';
+            case 'auth/user-not-found':
+                return 'Usuário não encontrado.';
+            case 'auth/wrong-password':
+                return 'Senha incorreta.';
+            case 'auth/email-already-in-use':
+                return 'E‑mail já em uso.';
+            case 'auth/operation-not-allowed':
+                return 'Operação não permitida.';
+            case 'auth/weak-password':
+                return 'Senha fraca.';
+            default:
+                return error.message || 'Erro de autenticação.';
+        }
+    }
+    return error.message || 'Erro de autenticação.';
 }
 
 // Inicializar listeners de pesquisa
@@ -2559,6 +2666,29 @@ function loadReviewData(userQuizId, quizId) {
         console.error('Erro ao carregar dados para revisão:', error);
         alert('Erro ao carregar dados para revisão.');
     });
+}
+
+function showDashboard() {
+    // Exibe o painel apropriado de acordo com o tipo de usuário
+    const userType = currentUser?.userType; // 'aluno', 'professor', 'admin', etc.
+
+    // Oculta todos os dashboards
+    studentDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+
+    // Mostra o dashboard correto
+    if (userType === 'aluno') {
+        studentDashboard.classList.remove('hidden');
+    } else if (userType === 'professor') {
+        teacherDashboard.classList.remove('hidden');
+    } else if (userType === 'admin') {
+        adminDashboard.classList.remove('hidden');
+    }
+
+    // Atualiza a UI geral
+    authContainer.classList.add('hidden');
+    quizContainer.classList.add('hidden');
 }
 
 // Quiz creation functions
