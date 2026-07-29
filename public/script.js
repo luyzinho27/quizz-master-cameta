@@ -1,6 +1,6 @@
 // Configuração do Firebase
 function resolveFirebaseConfig() {
-    const candidate = window.QUIZZ_MASTER_CAMETA_FIREBASE_CONFIG;
+    const candidate = window.QUIZ_MASTER_FIREBASE_CONFIG;
     if (candidate && typeof candidate === 'object') {
         return candidate;
     }
