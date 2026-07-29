@@ -866,8 +866,8 @@ function initSearchListeners() {
     document.getElementById('admin-ranking-search')?.addEventListener('input', (e) => filterRanking(e.target.value, 'admin'));
 
     // Pesquisa no Ranking por Quiz
-    document.getElementById('quiz-master-search')?.addEventListener('input', (e) => filterQuizRanking(e.target.value, 'student'));
-    document.getElementById('admin-quiz-master-search')?.addEventListener('input', (e) => filterQuizRanking(e.target.value, 'admin'));
+    document.getElementById('quizz-master-cameta-search')?.addEventListener('input', (e) => filterQuizRanking(e.target.value, 'student'));
+    document.getElementById('admin-quizz-master-cameta-search')?.addEventListener('input', (e) => filterQuizRanking(e.target.value, 'admin'));
 
     // Pesquisa na lista de usuários do admin
     document.getElementById('admin-users-search')?.addEventListener('input', (e) => filterAdminUsers(e.target.value));
@@ -886,8 +886,8 @@ function initTabNavigation() {
         loadRanking();
     });
     
-    document.getElementById('quiz-masters-tab').addEventListener('click', () => {
-        switchTab('quiz-masters-tab', 'quiz-masters-section');
+    document.getElementById('quizz-master-cametas-tab').addEventListener('click', () => {
+        switchTab('quizz-master-cametas-tab', 'quizz-master-cametas-section');
         loadQuizRankings();
     });
     
@@ -921,8 +921,8 @@ function initTabNavigation() {
         loadAdminRanking();
     });
     
-    document.getElementById('admin-quiz-masters-tab').addEventListener('click', () => {
-        switchAdminTab('admin-quiz-masters-tab', 'admin-quiz-masters-section');
+    document.getElementById('admin-quizz-master-cametas-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quizz-master-cametas-tab', 'admin-quizz-master-cametas-section');
         loadAdminQuizRankings();
     });
     
@@ -1022,11 +1022,11 @@ function initModals() {
     });
     
     // Event listener para seleção de quiz no ranking
-    document.getElementById('quiz-master-select')?.addEventListener('change', function() {
+    document.getElementById('quizz-master-cameta-select')?.addEventListener('change', function() {
         loadSpecificQuizRanking(this.value);
     });
     
-    document.getElementById('admin-quiz-master-select')?.addEventListener('change', function() {
+    document.getElementById('admin-quizz-master-cameta-select')?.addEventListener('change', function() {
         loadAdminSpecificQuizRanking(this.value);
     });
 }
@@ -2771,8 +2771,8 @@ function filterRanking(term, type) {
 
 // Carregar ranking por quiz para aluno
 function loadQuizRankings() {
-    const quizRankingList = document.getElementById('quiz-master-list');
-    const quizSelect = document.getElementById('quiz-master-select');
+    const quizRankingList = document.getElementById('quizz-master-cameta-list');
+    const quizSelect = document.getElementById('quizz-master-cameta-select');
     
     quizRankingList.innerHTML = '<div class="info-text"><i class="fas fa-info-circle"></i><p>Carregando quizzes...</p></div>';
     quizSelect.innerHTML = '<option value="">Carregando quizzes...</option>';
@@ -2808,8 +2808,8 @@ function loadQuizRankings() {
 
 // Carregar ranking por quiz para admin
 function loadAdminQuizRankings() {
-    const quizRankingList = document.getElementById('admin-quiz-master-list');
-    const quizSelect = document.getElementById('admin-quiz-master-select');
+    const quizRankingList = document.getElementById('admin-quizz-master-cameta-list');
+    const quizSelect = document.getElementById('admin-quizz-master-cameta-select');
     
     quizRankingList.innerHTML = '<div class="info-text"><i class="fas fa-info-circle"></i><p>Carregando quizzes...</p></div>';
     quizSelect.innerHTML = '<option value="">Carregando quizzes...</option>';
@@ -2847,7 +2847,7 @@ function loadAdminQuizRankings() {
 function loadSpecificQuizRanking(quizId) {
     if (!quizId) return;
     
-    const quizRankingList = document.getElementById('quiz-master-list');
+    const quizRankingList = document.getElementById('quizz-master-cameta-list');
     quizRankingList.innerHTML = '<div class="ranking-container"><div class="ranking-item"><div class="ranking-info"><p>Carregando ranking do quiz...</p></div></div></div>';
     
     // Buscar o quiz
@@ -2949,7 +2949,7 @@ function loadSpecificQuizRanking(quizId) {
 function loadAdminSpecificQuizRanking(quizId) {
     if (!quizId) return;
     
-    const quizRankingList = document.getElementById('admin-quiz-master-list');
+    const quizRankingList = document.getElementById('admin-quizz-master-cameta-list');
     quizRankingList.innerHTML = '<div class="ranking-container"><div class="ranking-item"><div class="ranking-info"><p>Carregando ranking do quiz...</p></div></div></div>';
     
     // Buscar o quiz
@@ -3050,18 +3050,18 @@ function loadAdminSpecificQuizRanking(quizId) {
 // Exibir ranking do quiz
 function displayQuizRanking(quiz, quizResults, usersMap, rankingList, isAdmin = false) {
     // Armazenar dados em cache
-    if (rankingList.id === 'quiz-master-list') {
+    if (rankingList.id === 'quizz-master-cameta-list') {
         cachedQuizRankingData.student = { quiz, results: quizResults, usersMap };
-    } else if (rankingList.id === 'admin-quiz-master-list') {
+    } else if (rankingList.id === 'admin-quizz-master-cameta-list') {
         cachedQuizRankingData.admin = { quiz, results: quizResults, usersMap };
     }
 
     // Verificar filtro
     let filterTerm = '';
-    if (rankingList.id === 'quiz-master-list') {
-        filterTerm = document.getElementById('quiz-master-search').value;
-    } else if (rankingList.id === 'admin-quiz-master-list') {
-        filterTerm = document.getElementById('admin-quiz-master-search').value;
+    if (rankingList.id === 'quizz-master-cameta-list') {
+        filterTerm = document.getElementById('quizz-master-cameta-search').value;
+    } else if (rankingList.id === 'admin-quizz-master-cameta-list') {
+        filterTerm = document.getElementById('admin-quizz-master-cameta-search').value;
     }
 
     renderQuizRankingList(quiz, quizResults, usersMap, rankingList, isAdmin, filterTerm);
@@ -3168,7 +3168,7 @@ function filterQuizRanking(term, type) {
     const data = cachedQuizRankingData[type];
     if (!data.results.length) return;
 
-    const listId = type === 'admin' ? 'admin-quiz-master-list' : 'quiz-master-list';
+    const listId = type === 'admin' ? 'admin-quizz-master-cameta-list' : 'quizz-master-cameta-list';
     const listElement = document.getElementById(listId);
     const isAdmin = type === 'admin';
 
