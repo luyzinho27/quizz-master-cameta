@@ -5,7 +5,7 @@
   ![QuizMaster Banner](public/images/quizmaster-banner.png)
   
   [![Licença](https://img.shields.io/badge/licença-MIT-blue.svg)](LICENSE)
-  [![Versão](https://img.shields.io/badge/versão-1.0.1-brightgreen.svg)](https://github.com/luyzinho27/quiz-master)
+  [![Versão](https://img.shields.io/badge/versão-1.0.1-brightgreen.svg)](https://github.com/luyzinho27/quizz-master-cameta)
   [![Firebase](https://img.shields.io/badge/Firebase-Ativo-orange.svg)](https://firebase.google.com)
   
   **Transforme aprendizado em uma experiência envolvente e competitiva**
@@ -45,5 +45,5 @@ O **QuizMaster** é uma plataforma web educacional desenvolvida para proporciona
 
 1. **Clone o repositório:**
 ```bash
-git clone https://github.com/luyzinho27/quiz-master.git
-cd quiz-master
+git clone https://github.com/luyzinho27/quizz-master-cameta.git
+cd quizz-master-cameta
