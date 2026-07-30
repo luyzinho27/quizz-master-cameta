@@ -1,4 +1,4 @@
-// Evita execução duplicada se o script já foi carregado
+// Evita execução duplicada se o script já foi carregado...
 if (window.__quizMasterScriptLoaded) {
     console.warn('script.js já foi carregado anteriormente. Ignorando execução duplicada.');
     return;
