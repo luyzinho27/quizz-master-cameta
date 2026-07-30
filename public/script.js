@@ -2601,111 +2601,22 @@ function loadReviewData(userQuizId, quizId) {
     });
 }
 
-// Tratamento de formulário de cadastro
-const form = document.getElementById('registerForm');
-form.addEventListener('submit', function(e) {
+// Verificar existencia de elementos DOM antes de acesso
+const salaSelect = document.getElementById('salaSelect') || {};
+const alunoSelect = document.getElementById('alunoSelect') || {};
+
+// Adicionar validação para formulário de criar sala
+createSalaForm.addEventListener('submit', function(e) {
 	e.preventDefault();
 
-	// Coletar dados
-	const name = document.getElementById('name').value;
-	const email = document.getElementById('email').value;
-	const role = document.getElementById('role').value;
+	const nome = document.getElementById('salaNome')?.value?.trim();
 
-	// Validação
-	if (!name || !email || !role) {
-		alert('Preencha todos os campos!');
+	if (!nome) {
+		alert('Informe o nome da sala!');
 		return;
 	}
 
 	// Enviar para API
-	fetch('/api/register', {
-		method: 'POST',
-		body: JSON.stringify({ name, email, role })
-	})
-	.then(response => response.json())
-	.then(data => {
-		if (data.user) {
-			alert(`Usuário ${role} cadastrado: ${name}`);
-			location.reload();
-		}
-		else {
-			alert('Erro ao cadastrar');
-		}
-	})
-	.catch(error => console.error('Erro na API:', error));
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-});	.catch(error => console.error('Erro na API:', error));	})		}			alert('Erro ao adicionar aluno');		else {		}			location.reload();			alert('Aluno adicionado com sucesso');		if (data.message) {	.then(data => {	.then(response => response.json())	})		body: JSON.stringify({ salaId, alunoId })		method: 'POST',	fetch(`/api/salas/${salaId}/addAluno`, {	// Enviar para API	}		return;		alert('Selecione uma sala e um aluno!');	if (!salaId || !alunoId) {	// Validação	const alunoId = document.getElementById('alunoSelect').value;	const salaId = document.getElementById('salaSelect').value;	// Coletar IDs	e.preventDefault();addAlunoToSalaForm.addEventListener('submit', function(e) {const addAlunoToSalaForm = document.getElementById('addAlunoToSalaForm');// Tratamento de formulário para adicionar aluno a sala});	.catch(error => console.error('Erro na API:', error));	})		}			alert('Erro ao criar sala');		else {		}			location.reload();			alert(`Sala énica criada: ${nome}`);		if (data.sala) {	.then(data => {	.then(response => response.json())	})		body: JSON.stringify({ nome })		method: 'POST',	fetch('/api/salas', {	// Enviar para API	}		return;		alert('Informe o nome da sala!');	if (!nome) {	// Validação	const nome = document.getElementById('salaNome').value;	// Coletar nome da sala	e.preventDefault();createSalaForm.addEventListener('submit', function(e) {const createSalaForm = document.getElementById('createSalaForm');// Tratamento de formulário para criar nova sala// Tratamento de formulário para criar nova sala
-document.getElementById('createSalaForm').addEventListener('submit', function(e) {
-	e.preventDefault();
-
-	const nome = document.getElementById('salaNome').value;
-
 	fetch('/api/salas', {
 		method: 'POST',
 		body: JSON.stringify({ nome })
@@ -2713,42 +2624,11 @@ document.getElementById('createSalaForm').addEventListener('submit', function(e)
 	.then(response => response.json())
 	.then(data => {
 		if (data.sala) {
-			alert(`Sala ${nome} criada com sucesso!`);
-			// Atualizar selecao de salas
-			populateSalaSelect(); // Função a ser implementada
+			alert(`Sala énica criada: ${nome}`);
+			location.reload();
 		}
 		else {
 			alert('Erro ao criar sala');
-		}
-	})
-	.catch(error => console.error('Erro na API:', error));
-});
-
-// Tratamento de formulário para adicionar aluno a sala
-document.getElementById('addAlunoToSalaForm').addEventListener('submit', function(e) {
-	e.preventDefault();
-
-	const salaId = document.getElementById('salaSelect').value;
-	const alunoId = document.getElementById('alunoSelect').value;
-
-	if (!salaId || !alunoId) {
-		alert('Selecione uma sala e um aluno');
-		return;
-	}
-
-	fetch(`/api/salas/${salaId}/addAluno`, {
-		method: 'POST',
-		body: JSON.stringify({ salaId, alunoId })
-	})
-	.then(response => response.json())
-	.then(data => {
-		if (data.message) {
-			alert(data.message);
-			// Atualizar lista de alunos na sala
-			populateAlunoList(); // Função a ser implementada
-		}
-		else {
-			alert('Erro ao adicionar aluno');
 		}
 	})
 	.catch(error => console.error('Erro na API:', error));
