@@ -1331,31 +1331,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="config.js?v=202607291028"></script>
     <script src="script.js?v=202607291028"></script>
-
-    <!-- Adicionando lógica para alternar entre as abas -->
-    <script>
-    console.log('Inline script after script.js executed');
-// Funcao para alternar entre as abas
-function toggleTab(tabId, formId) {
-    // Remover classe ativa de todas as abas
-    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-    // Remover classe ativa de todos os formulários
-    document.querySelectorAll('.form').forEach(form => form.classList.remove('active'));
-    
-    // Adicionar classe ativa ao botão clicado
-    document.getElementById(tabId).classList.add('active');
-    // Mostrar o formulário correspondente
-    document.getElementById(formId).classList.add('active');
-}
-
-// Eventos de clique para as abas
-document.getElementById('login-tab').addEventListener('click', function() {
-    toggleTab('login-tab', 'login-form');
-});
-
-document.getElementById('register-tab').addEventListener('click', function() {
-    toggleTab('register-tab', 'register-form');
-});
 </script>
 </body>
 </html>
