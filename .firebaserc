@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "quizz-master-cameta"
+  },
+  "targets": {
+    "quizz-master-cameta": {
+      "hosting": {
+        "app": [
+          "quizz-master-cameta"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}
