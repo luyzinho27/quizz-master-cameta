@@ -374,6 +374,46 @@ document.addEventListener('DOMContentLoaded', function() {
     initEventListeners();
     initModals();
     
+    // Função para carregar as salas no dropdown
+function carregarSalas() {
+	fetch('/api/salas')
+	.then(response => response.json())
+	.then(data => {
+		const select = document.getElementById('salaSelect');
+		salec.select.innerHTML = '';
+		dados.salas.forEach(sala => {
+			const option = document.createElement('option');
+			option.value = sala.id;
+			option.textContent = sala.nome;
+			salec.select.appendChild(option);
+		});
+	})
+	.catch(error => console.error('Erro ao carregar salas:', error));
+}
+
+// Função para carregar os alunos no dropdown
+function carregarAlunos() {
+	fetch('/api/alunos')
+	.then(response => response.json())
+	.then(data => {
+		const select = document.getElementById('alunoSelect');
+		alun.select.innerHTML = '';
+		dados.alunos.forEach(aluno => {
+			const option = document.createElement('option');
+			option.value = aluno.id;
+			option.textContent = aluno.name;
+			alun.select.appendChild(option);
+		});
+	})
+	.catch(error => console.error('Erro ao carregar alunos:', error));
+}
+
+// Chamar as funções quando a página carregar
+document.addEventListener('DOMContentLoaded', function() {
+	carregarSalas();
+	carregarAlunos();
+});
+
     // Verificar se há um usuário logado
     auth.onAuthStateChanged(user => {
         if (user) {
@@ -2561,10 +2601,155 @@ function loadReviewData(userQuizId, quizId) {
     });
 }
 
-// Quiz creation functions
+// Tratamento de formulário de cadastro
+const form = document.getElementById('registerForm');
+form.addEventListener('submit', function(e) {
+	e.preventDefault();
 
-// The room and quiz creation logic that depended on the removed Rooms module has been
-// removed. If room management is required, a new implementation should be added.
+	// Coletar dados
+	const name = document.getElementById('name').value;
+	const email = document.getElementById('email').value;
+	const role = document.getElementById('role').value;
 
-// Function to add student to room
-// Room management functionality has been removed. If needed, reimplement here.
+	// Validação
+	if (!name || !email || !role) {
+		alert('Preencha todos os campos!');
+		return;
+	}
+
+	// Enviar para API
+	fetch('/api/register', {
+		method: 'POST',
+		body: JSON.stringify({ name, email, role })
+	})
+	.then(response => response.json())
+	.then(data => {
+		if (data.user) {
+			alert(`Usuário ${role} cadastrado: ${name}`);
+			location.reload();
+		}
+		else {
+			alert('Erro ao cadastrar');
+		}
+	})
+	.catch(error => console.error('Erro na API:', error));
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+});	.catch(error => console.error('Erro na API:', error));	})		}			alert('Erro ao adicionar aluno');		else {		}			location.reload();			alert('Aluno adicionado com sucesso');		if (data.message) {	.then(data => {	.then(response => response.json())	})		body: JSON.stringify({ salaId, alunoId })		method: 'POST',	fetch(`/api/salas/${salaId}/addAluno`, {	// Enviar para API	}		return;		alert('Selecione uma sala e um aluno!');	if (!salaId || !alunoId) {	// Validação	const alunoId = document.getElementById('alunoSelect').value;	const salaId = document.getElementById('salaSelect').value;	// Coletar IDs	e.preventDefault();addAlunoToSalaForm.addEventListener('submit', function(e) {const addAlunoToSalaForm = document.getElementById('addAlunoToSalaForm');// Tratamento de formulário para adicionar aluno a sala});	.catch(error => console.error('Erro na API:', error));	})		}			alert('Erro ao criar sala');		else {		}			location.reload();			alert(`Sala énica criada: ${nome}`);		if (data.sala) {	.then(data => {	.then(response => response.json())	})		body: JSON.stringify({ nome })		method: 'POST',	fetch('/api/salas', {	// Enviar para API	}		return;		alert('Informe o nome da sala!');	if (!nome) {	// Validação	const nome = document.getElementById('salaNome').value;	// Coletar nome da sala	e.preventDefault();createSalaForm.addEventListener('submit', function(e) {const createSalaForm = document.getElementById('createSalaForm');// Tratamento de formulário para criar nova sala// Tratamento de formulário para criar nova sala
+document.getElementById('createSalaForm').addEventListener('submit', function(e) {
+	e.preventDefault();
+
+	const nome = document.getElementById('salaNome').value;
+
+	fetch('/api/salas', {
+		method: 'POST',
+		body: JSON.stringify({ nome })
+	})
+	.then(response => response.json())
+	.then(data => {
+		if (data.sala) {
+			alert(`Sala ${nome} criada com sucesso!`);
+			// Atualizar selecao de salas
+			populateSalaSelect(); // Função a ser implementada
+		}
+		else {
+			alert('Erro ao criar sala');
+		}
+	})
+	.catch(error => console.error('Erro na API:', error));
+});
+
+// Tratamento de formulário para adicionar aluno a sala
+document.getElementById('addAlunoToSalaForm').addEventListener('submit', function(e) {
+	e.preventDefault();
+
+	const salaId = document.getElementById('salaSelect').value;
+	const alunoId = document.getElementById('alunoSelect').value;
+
+	if (!salaId || !alunoId) {
+		alert('Selecione uma sala e um aluno');
+		return;
+	}
+
+	fetch(`/api/salas/${salaId}/addAluno`, {
+		method: 'POST',
+		body: JSON.stringify({ salaId, alunoId })
+	})
+	.then(response => response.json())
+	.then(data => {
+		if (data.message) {
+			alert(data.message);
+			// Atualizar lista de alunos na sala
+			populateAlunoList(); // Função a ser implementada
+		}
+		else {
+			alert('Erro ao adicionar aluno');
+		}
+	})
+	.catch(error => console.error('Erro na API:', error));
+});
