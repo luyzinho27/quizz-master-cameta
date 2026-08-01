@@ -38,15 +38,10 @@
                         <i class="fas fa-user-plus"></i>
                         Cadastro
                     </button>
-                </div>
-                
-                <!-- Formulário de Login -->
-                <form id="login-form" class="form active">
-                    <h2>Entre na sua conta</h2>
-                    <div class="input-group">
-                        <i class="fas fa-envelope"></i>
-                        <input type="email" id="login-email" placeholder="E-mail" required>
-                    </div>
+    <button id="admin-tab" class="tab">
+        <i class="fas fa-user-cog"></i>
+        Administrador
+    </button>
                     <div class="input-group password-group">
                         <i class="fas fa-lock"></i>
                         <input type="password" id="login-password" placeholder="Senha" required>
@@ -342,6 +337,65 @@
 
     <!-- Dashboard do Professor -->
     <div id="professor-dashboard" class="container hidden">
+    <header class="dashboard-header">
+        <div class="header-left">
+            <a href="#" id="auth-links-2" onclick="window.location.reload(); return false;">
+                <div class="logo">
+                    <i class="fas fa-brain"></i>
+                    <h1>QuizMaster</h1>
+                </div>
+            </a>
+            <nav class="tabs">
+                <button id="professor-rooms-tab" class="tab active">
+                    <i class="fas fa-door-open"></i>
+                    <span class="tab-text">Salas</span>
+                </button>
+                <button id="professor-students-tab" class="tab">
+                    <i class="fas fa-user-graduate"></i>
+                    <span class="tab-text">Alunos</span>
+                </button>
+                <button id="professor-quizzes-tab" class="tab">
+                    <i class="fas fa-list-alt"></i>
+                    <span class="tab-text">Quizzes</span>
+                </button>
+                <button id="professor-reports-tab" class="tab">
+                    <i class="fas fa-chart-bar"></i>
+                    <span class="tab-text">Relatórios</span>
+                </button>
+                <button id="professor-about-tab" class="tab">
+                    <i class="fas fa-info-circle"></i>
+                    <span class="tab-text">Sobre</span>
+                </button>
+            </nav>
+        </div>
+        <div class="user-info">
+            <div class="user-details">
+                <span id="professor-name" class="user-name"></span>
+                <span class="user-role">Professor</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ADICIONAR TAB PARA ADMINISTRADOR -->
+    <div id="admin-professor-tab" class="tab-container hidden">
+        <h3>Perfil do Professor</h3>
+        <div class="profile-content">
+            <p>Visualize e gerencie as salas e alunos associados ao seu perfil.</p>
+            <button id="toggle-admin-professor" class="btn btn-secondary">
+                <i class="fas fa-chevron-right"></i>
+                <span>Mostrar Perfil do Professor</span>
+            </button>
+        </div>
+    </div>
+
+    <main class="dashboard-content">
+        <!-- CONTEÚDO EXISTENTE DO DASHBOARD DO PROFESSOR -->
+        <div id="professor-rooms-section" class="section active">
+            <!-- ... (conteúdo existente) ... -->
+        </div>
+        <!-- ... (outros sections) ... -->
+    </main>
+</div>
         <header class="dashboard-header">
             <div class="header-left">
                 <a href="#" id="auth-links-2" onclick="window.location.reload(); return false;">
