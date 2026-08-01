@@ -377,13 +377,24 @@ function loadRoomAvailableStudents() {
     // Buscar todos os alunos do sistema
     db.collection('users')
         .where('userType', '==', 'aluno')
-        .orderBy('name')
         .get()
         .then(querySnapshot => {
+            const students = [];
+            querySnapshot.forEach(doc => {
+                students.push({ id: doc.id, ...doc.data() });
+            });
+            
+            // Ordenar localmente por nome
+            students.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+            
             studentsList.innerHTML = '';
             
-            querySnapshot.forEach(doc => {
-                const student = { id: doc.id, ...doc.data() };
+            if (students.length === 0) {
+                studentsList.innerHTML = '<p>Nenhum aluno cadastrado no sistema.</p>';
+                return;
+            }
+            
+            students.forEach(student => {
                 const isSelected = selectedRoomStudents.includes(student.id);
                 
                 const studentCheckbox = document.createElement('div');
