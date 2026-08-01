@@ -59,6 +59,7 @@ let quizPrintMediaQuery = null;
 let lastProgressSyncAt = 0;
 let reviewDataQuizId = null;
 let reviewDataUserQuizId = null;
+let isRegistering = false;
 
 const QUIZ_STATE_PREFIX = 'quizState:';
 const QUIZ_PROGRESS_SYNC_MS = 15000;
@@ -518,6 +519,9 @@ function initAuth() {
         checkAdminExists();
     });
     
+    // Verificar admin desde o carregamento da página
+    checkAdminExists();
+    
     // Login com submit do formulário
     loginForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -569,18 +573,40 @@ function initAuth() {
             return;
         }
         
+        if (isRegistering) {
+            return;
+        }
+        
+        isRegistering = true;
+        document.getElementById('register-btn').disabled = true;
+        
+        const finishRegistration = () => {
+            isRegistering = false;
+            document.getElementById('register-btn').disabled = false;
+        };
+        
+        const doRegister = () => {
+            registerUser(name, email, password, userType)
+                .finally(finishRegistration);
+        };
+        
         // Verificar se já existe administrador
         if (userType === 'admin') {
             checkAdminExists().then(adminExists => {
                 if (adminExists) {
                     showError('register-error', 'Já existe um administrador cadastrado. Não é possível criar outro.');
+                    finishRegistration();
                     return;
                 } else {
-                    registerUser(name, email, password, userType);
+                    doRegister();
                 }
+            }).catch(error => {
+                showError('register-error', 'Erro ao verificar administrador. Tente novamente.');
+                console.error('Erro ao verificar administrador:', error);
+                finishRegistration();
             });
         } else {
-            registerUser(name, email, password, userType);
+            doRegister();
         }
     });
     
@@ -667,10 +693,14 @@ function checkAdminExists() {
         .get()
         .then(querySnapshot => {
             const adminOption = document.getElementById('admin-option');
+            const registerType = document.getElementById('register-type');
             if (!querySnapshot.empty) {
                 // Já existe administrador, desabilitar opção
                 adminOption.disabled = true;
                 adminOption.textContent = 'Administrador (Já existe)';
+                if (registerType && registerType.value === 'admin') {
+                    registerType.value = 'aluno';
+                }
                 return true;
             } else {
                 // Não existe administrador, habilitar opção
@@ -708,7 +738,7 @@ function switchAuthTab(tab) {
 // Registrar novo usuário
 function registerUser(name, email, password, userType) {
     showLoading();
-    auth.createUserWithEmailAndPassword(email, password)
+    return auth.createUserWithEmailAndPassword(email, password)
         .then((userCredential) => {
             const user = userCredential.user;
             
@@ -4638,68 +4668,3 @@ function displayFullRanking(fullRanking, usersMap, fullRankingElement) {
 // ===============================
 
 // Inicializar a aplicação
-document.addEventListener('DOMContentLoaded', function() {
-    initAuth();
-    initEventListeners();
-    initModals();
-    
-    // Verificar se há um usuário logado
-    auth.onAuthStateChanged(user => {
-        if (user) {
-            // Usuário está logado
-            showLoading();
-            ensureUserDocument(user).then(userData => {
-                // Verificar se o usuário está ativo
-                if (userData.status === 'inactive' && userData.userType === 'aluno') {
-                    auth.signOut();
-                    hideLoading();
-                    alert('Sua conta foi desativada. Entre em contato com o administrador.');
-                    return;
-                }
-                
-                currentUser = { ...user, ...userData };
-                hideLoading();
-                showDashboard();
-            }).catch(error => {
-                hideLoading();
-                console.error('Erro ao carregar dados do usuário:', error);
-                auth.signOut();
-                showAuth();
-                showError('login-error', getAuthErrorMessage(error));
-            });
-        } else {
-            // Nenhum usuário logado
-            hideLoading();
-            showAuth();
-        }
-    });
-    // Tratar resultado de redirect (fallback quando popup for bloqueado)
-    auth.getRedirectResult()
-        .then((result) => {
-            if (result && result.user) {
-                // Garantir documento do usuário para login social via redirect
-                ensureUserDocument(result.user)
-                    .then(userData => {
-                        if (userData && userData.status === 'inactive' && userData.userType === 'aluno') {
-                            return auth.signOut().then(() => {
-                                hideLoading();
-                                showError('login-error', 'Sua conta foi desativada. Entre em contato com o administrador.');
-                            });
-                        }
-
-                        document.getElementById('login-error').textContent = '';
-                        hideLoading();
-                    })
-                    .catch(err => {
-                        console.error('Erro ao garantir documento do usuário (redirect):', err);
-                        hideLoading();
-                    });
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao processar getRedirectResult:', error);
-            // Mostrar erro amigável
-            hideLoading();
-            showError('login-error', getAuthErrorMessage(error));
-        });
-});
