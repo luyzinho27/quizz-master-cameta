@@ -5947,6 +5947,5 @@ function finishQuiz(forced = false) {
             }
         });
     }
-
-    const timeTaken = totalTime - timeRemaining;
 }
+    const timeTaken = totalTime - timeRemaining;
