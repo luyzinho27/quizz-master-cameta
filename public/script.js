@@ -546,6 +546,8 @@ function createUserAccount({ name, email, password, userType, status = 'active',
 
 // Inicializar autenticação
 function initAuth() {
+    console.log('Iniciando autenticação...');
+} {
     const loginTab = document.getElementById('login-tab');
     const registerTab = document.getElementById('register-tab');
     const loginForm = document.getElementById('login-form');
