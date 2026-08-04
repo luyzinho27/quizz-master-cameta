@@ -2679,3 +2679,1171 @@ function switchTeacherTab(tabId, sectionId) {
     document.getElementById(tabId).classList.add('active');
     document.getElementById(sectionId).classList.add('active');
 }
+
+// Funções de loading
+function showLoading() {
+    loading.classList.remove('hidden');
+}
+
+function hideLoading() {
+    loading.classList.add('hidden');
+}
+
+function setCurrentUserPassword(password) {
+    currentUserPassword = password || null;
+}
+
+function clearCurrentUserPassword() {
+    currentUserPassword = null;
+}
+
+// Registrar novo usuário
+function registerUser(name, email, password, userType) {
+    showLoading();
+    auth.createUserWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+            const user = userCredential.user;
+            
+            // Salvar dados adicionais do usuário no Firestore
+            return db.collection('users').doc(user.uid).set({
+                name: name,
+                email: email,
+                userType: userType,
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        })
+        .then(() => {
+            hideLoading();
+            document.getElementById('register-error').textContent = '';
+            showSuccess('register-error', 'Cadastro realizado com sucesso!');
+            
+            // Limpar formulário e mudar para login após 2 segundos
+            setTimeout(() => {
+                document.getElementById('register-form').reset();
+                switchAuthTab('login');
+            }, 2000);
+        })
+        .catch((error) => {
+            console.error('Erro ao registrar usuario:', error);
+            hideLoading();
+            showError('register-error', getAuthErrorMessage(error));
+        });
+}
+
+// Obter dados do usuário
+// Garantir documento do usuario para login social
+function ensureUserDocument(user) {
+    return db.collection('users').doc(user.uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            }
+
+            const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : 'Aluno');
+            const userData = {
+                name: fallbackName,
+                email: user.email || '',
+                userType: 'aluno',
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            return db.collection('users').doc(user.uid).set(userData).then(() => userData);
+        });
+}
+
+// Login com Google
+function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    showLoading();
+    auth.signInWithPopup(provider)
+        .then((result) => ensureUserDocument(result.user))
+        .then(userData => {
+            if (userData && userData.status === 'inactive' && userData.userType === 'aluno') {
+                return auth.signOut().then(() => {
+                    hideLoading();
+                    showError('login-error', 'Sua conta foi desativada. Entre em contato com o administrador.');
+                });
+            }
+
+            document.getElementById('login-error').textContent = '';
+            hideLoading();
+        })
+        .catch((error) => {
+            console.error('Erro no login com Google:', error);
+
+            // Erro comum: provedor Google não habilitado no Firebase (operation-not-allowed)
+            if (error && error.code === 'auth/operation-not-allowed') {
+                hideLoading();
+                showError('login-error', 'Login com Google não habilitado no projeto Firebase. Para habilitar, acesse o Firebase Console, vá para a aba "Authentication" > "Sign-in method" e ative o provedor "Google". Certifique-se também de adicionar o domínio (ex: localhost) na lista de domínios autorizados.');
+                return;
+            }
+
+            // Popup bloqueado ou similar: tentar fallback para redirect
+            if (error && (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request')) {
+                console.warn('Popup bloqueado ou fechado. Tentando fallback com redirect...');
+                // Não chamamos hideLoading() aqui porque será tratado no redirect flow
+                auth.signInWithRedirect(provider);
+                return;
+            }
+
+            hideLoading();
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}
+
+function getUserData(uid) {
+    return db.collection('users').doc(uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            } else {
+                throw new Error('Usuário não encontrado');
+            }
+        });
+}
+
+// Inicializar event listeners
+function initEventListeners() {
+    // Logout
+    document.getElementById('student-logout').addEventListener('click', logout);
+    document.getElementById('admin-logout').addEventListener('click', logout);
+    document.getElementById('teacher-logout')?.addEventListener('click', logout);
+    
+    // Navegação entre abas
+    initTabNavigation();
+    
+    // Controles do quiz
+    initQuizControls();
+    
+    // Navegação dos resultados
+    document.getElementById('back-to-dashboard').addEventListener('click', () => {
+        showDashboard();
+    });
+    
+    document.getElementById('new-quiz').addEventListener('click', () => {
+        showDashboard();
+        setTimeout(() => {
+            if (currentUser.userType === 'aluno') {
+                switchTab('quizzes-tab', 'quizzes-section');
+                loadQuizzes();
+            }
+        }, 100);
+    });
+    
+    document.getElementById('review-quiz').addEventListener('click', handleReviewClick);
+    
+    // Botões do admin
+    document.getElementById('create-quiz-btn').addEventListener('click', () => openQuizModal());
+    document.getElementById('create-question-btn').addEventListener('click', () => openQuestionModal());
+    document.getElementById('import-questions-btn').addEventListener('click', openImportModal);
+    document.getElementById('create-user-btn')?.addEventListener('click', () => openUserModal());
+
+    // Botões do professor
+    document.getElementById('create-room-btn')?.addEventListener('click', () => openRoomModal());
+    document.getElementById('teacher-create-quiz-btn')?.addEventListener('click', () => openTeacherQuizModal());
+    document.getElementById('create-student-btn')?.addEventListener('click', () => openTeacherUserModal());
+    
+    // Inicializar página sobre se existir
+    if (document.getElementById('about-section')) {
+        initAboutPage();
+    }
+
+    // Inicializar listeners de pesquisa
+    initSearchListeners();
+
+    window.addEventListener('beforeunload', handleQuizBeforeUnload);
+    window.addEventListener('pagehide', handleQuizBeforeUnload);
+}
+
+// Inicializar navegação por abas
+function initTabNavigation() {
+    // Abas do aluno
+    document.getElementById('quizzes-tab').addEventListener('click', () => {
+        switchTab('quizzes-tab', 'quizzes-section');
+        loadQuizzes();
+    });
+    
+    document.getElementById('ranking-tab').addEventListener('click', () => {
+        switchTab('ranking-tab', 'ranking-section');
+        loadRanking();
+    });
+    
+    document.getElementById('quiz-masters-tab').addEventListener('click', () => {
+        switchTab('quiz-masters-tab', 'quiz-masters-section');
+        loadQuizRankings();
+    });
+    
+    document.getElementById('history-tab').addEventListener('click', () => {
+        switchTab('history-tab', 'history-section');
+        loadUserHistory();
+    });
+    
+    document.getElementById('about-tab').addEventListener('click', () => {
+        switchTab('about-tab', 'about-section');
+    });
+    
+    // Abas do admin
+    document.getElementById('admin-quizzes-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quizzes-tab', 'admin-quizzes-section');
+        loadAdminQuizzes();
+    });
+    
+    document.getElementById('admin-questions-tab').addEventListener('click', () => {
+        switchAdminTab('admin-questions-tab', 'admin-questions-section');
+        loadAdminQuestions();
+    });
+    
+    document.getElementById('admin-users-tab').addEventListener('click', () => {
+        switchAdminTab('admin-users-tab', 'admin-users-section');
+        loadAdminUsers();
+    });
+    
+    document.getElementById('admin-ranking-tab').addEventListener('click', () => {
+        switchAdminTab('admin-ranking-tab', 'admin-ranking-section');
+        loadAdminRanking();
+    });
+    
+    document.getElementById('admin-quiz-masters-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quiz-masters-tab', 'admin-quiz-masters-section');
+        loadAdminQuizRankings();
+    });
+    
+    document.getElementById('admin-reports-tab').addEventListener('click', () => {
+        switchAdminTab('admin-reports-tab', 'admin-reports-section');
+        loadAdminReports();
+    });
+    
+    document.getElementById('admin-about-tab').addEventListener('click', () => {
+        switchAdminTab('admin-about-tab', 'admin-about-section');
+    });
+    
+    // Botão de sair do quiz
+    document.getElementById('exit-quiz-btn').addEventListener('click', confirmExitQuiz);
+}
+
+// Inicializar controles do quiz
+function initQuizControls() {
+    document.getElementById('prev-question').addEventListener('click', () => {
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('next-question').addEventListener('click', () => {
+        if (currentQuestionIndex < currentQuestions.length - 1) {
+            currentQuestionIndex++;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('finish-quiz').addEventListener('click', () => {
+        finishQuiz();
+    });
+    
+    // Seleção de opções
+    document.querySelectorAll('.option').forEach(option => {
+        option.addEventListener('click', function() {
+            const selectedValue = this.getAttribute('data-value');
+            selectOption(selectedValue);
+        });
+    });
+}
+
+// Inicializar modals
+function initModals() {
+    // Modal do quiz
+    document.getElementById('close-quiz-modal').addEventListener('click', closeQuizModal);
+    document.getElementById('cancel-quiz').addEventListener('click', closeQuizModal);
+    document.getElementById('save-quiz').addEventListener('click', saveQuiz);
+    
+    // Modal da questão
+    document.getElementById('close-question-modal').addEventListener('click', closeQuestionModal);
+    document.getElementById('cancel-question').addEventListener('click', closeQuestionModal);
+    document.getElementById('save-question').addEventListener('click', saveQuestion);
+    
+    // Modal do usuário
+    document.getElementById('close-user-modal').addEventListener('click', closeUserModal);
+    document.getElementById('cancel-user').addEventListener('click', closeUserModal);
+    document.getElementById('save-user').addEventListener('click', saveUser);
+    
+    // Modal de importação
+    document.getElementById('close-import-modal').addEventListener('click', closeImportModal);
+    document.getElementById('cancel-import').addEventListener('click', closeImportModal);
+    document.getElementById('import-questions').addEventListener('click', importQuestions);
+    
+    // Modal de revisão
+    document.getElementById('close-review-modal').addEventListener('click', closeReviewModal);
+    document.getElementById('close-review').addEventListener('click', closeReviewModal);
+    
+    // Fechar modals ao clicar fora
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    });
+    
+    // Event listeners para a visibilidade do quiz
+    document.getElementById('quiz-visibility').addEventListener('change', function() {
+        const specificStudentsContainer = document.getElementById('specific-students-container');
+        if (this.value === 'specific') {
+            specificStudentsContainer.classList.remove('hidden');
+            loadAvailableStudents();
+        } else {
+            specificStudentsContainer.classList.add('hidden');
+            selectedStudents = [];
+            updateSelectedStudentsDisplay();
+        }
+    });
+    
+    // Event listener para busca de alunos
+    document.getElementById('student-search')?.addEventListener('input', function() {
+        filterAvailableStudents(this.value);
+    });
+    
+    // Event listener para seleção de quiz no ranking
+    document.getElementById('quiz-master-select')?.addEventListener('change', function() {
+        loadSpecificQuizRanking(this.value);
+    });
+    
+    document.getElementById('admin-quiz-master-select')?.addEventListener('change', function() {
+        loadAdminSpecificQuizRanking(this.value);
+    });
+
+    // Modais do professor
+    document.getElementById('close-room-modal')?.addEventListener('click', closeRoomModal);
+    document.getElementById('cancel-room')?.addEventListener('click', closeRoomModal);
+    document.getElementById('save-room')?.addEventListener('click', saveRoom);
+    document.getElementById('close-teacher-quiz-modal')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('cancel-teacher-quiz')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('save-teacher-quiz')?.addEventListener('click', saveTeacherQuiz);
+    document.getElementById('close-teacher-user-modal')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('cancel-teacher-user')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('save-teacher-user')?.addEventListener('click', saveTeacherUser);
+}
+
+// Alternar entre abas do aluno
+function switchTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#student-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#student-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+// Alternar entre abas do admin
+function switchAdminTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#admin-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#admin-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+function switchTeacherTab(tabId, sectionId) {
+    const tabs = document.querySelectorAll('#teacher-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#teacher-dashboard .dashboard-content .section');
+
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+// Funções de loading
+function showLoading() {
+    loading.classList.remove('hidden');
+}
+
+function hideLoading() {
+    loading.classList.add('hidden');
+}
+
+function setCurrentUserPassword(password) {
+    currentUserPassword = password || null;
+}
+
+function clearCurrentUserPassword() {
+    currentUserPassword = null;
+}
+
+// Registrar novo usuário
+function registerUser(name, email, password, userType) {
+    showLoading();
+    auth.createUserWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+            const user = userCredential.user;
+            
+            // Salvar dados adicionais do usuário no Firestore
+            return db.collection('users').doc(user.uid).set({
+                name: name,
+                email: email,
+                userType: userType,
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        })
+        .then(() => {
+            hideLoading();
+            document.getElementById('register-error').textContent = '';
+            showSuccess('register-error', 'Cadastro realizado com sucesso!');
+            
+            // Limpar formulário e mudar para login após 2 segundos
+            setTimeout(() => {
+                document.getElementById('register-form').reset();
+                switchAuthTab('login');
+            }, 2000);
+        })
+        .catch((error) => {
+            console.error('Erro ao registrar usuario:', error);
+            hideLoading();
+            showError('register-error', getAuthErrorMessage(error));
+        });
+}
+
+// Obter dados do usuário
+// Garantir documento do usuario para login social
+function ensureUserDocument(user) {
+    return db.collection('users').doc(user.uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            }
+
+            const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : 'Aluno');
+            const userData = {
+                name: fallbackName,
+                email: user.email || '',
+                userType: 'aluno',
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            return db.collection('users').doc(user.uid).set(userData).then(() => userData);
+        });
+}
+
+// Login com Google
+function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    showLoading();
+    auth.signInWithPopup(provider)
+        .then((result) => ensureUserDocument(result.user))
+        .then(userData => {
+            if (userData && userData.status === 'inactive' && userData.userType === 'aluno') {
+                return auth.signOut().then(() => {
+                    hideLoading();
+                    showError('login-error', 'Sua conta foi desativada. Entre em contato com o administrador.');
+                });
+            }
+
+            document.getElementById('login-error').textContent = '';
+            hideLoading();
+        })
+        .catch((error) => {
+            console.error('Erro no login com Google:', error);
+
+            // Erro comum: provedor Google não habilitado no Firebase (operation-not-allowed)
+            if (error && error.code === 'auth/operation-not-allowed') {
+                hideLoading();
+                showError('login-error', 'Login com Google não habilitado no projeto Firebase. Para habilitar, acesse o Firebase Console, vá para a aba "Authentication" > "Sign-in method" e ative o provedor "Google". Certifique-se também de adicionar o domínio (ex: localhost) na lista de domínios autorizados.');
+                return;
+            }
+
+            // Popup bloqueado ou similar: tentar fallback para redirect
+            if (error && (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request')) {
+                console.warn('Popup bloqueado ou fechado. Tentando fallback com redirect...');
+                // Não chamamos hideLoading() aqui porque será tratado no redirect flow
+                auth.signInWithRedirect(provider);
+                return;
+            }
+
+            hideLoading();
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}
+
+function getUserData(uid) {
+    return db.collection('users').doc(uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            } else {
+                throw new Error('Usuário não encontrado');
+            }
+        });
+}
+
+// Inicializar event listeners
+function initEventListeners() {
+    // Logout
+    document.getElementById('student-logout').addEventListener('click', logout);
+    document.getElementById('admin-logout').addEventListener('click', logout);
+    document.getElementById('teacher-logout')?.addEventListener('click', logout);
+    
+    // Navegação entre abas
+    initTabNavigation();
+    
+    // Controles do quiz
+    initQuizControls();
+    
+    // Navegação dos resultados
+    document.getElementById('back-to-dashboard').addEventListener('click', () => {
+        showDashboard();
+    });
+    
+    document.getElementById('new-quiz').addEventListener('click', () => {
+        showDashboard();
+        setTimeout(() => {
+            if (currentUser.userType === 'aluno') {
+                switchTab('quizzes-tab', 'quizzes-section');
+                loadQuizzes();
+            }
+        }, 100);
+    });
+    
+    document.getElementById('review-quiz').addEventListener('click', handleReviewClick);
+    
+    // Botões do admin
+    document.getElementById('create-quiz-btn').addEventListener('click', () => openQuizModal());
+    document.getElementById('create-question-btn').addEventListener('click', () => openQuestionModal());
+    document.getElementById('import-questions-btn').addEventListener('click', openImportModal);
+    document.getElementById('create-user-btn')?.addEventListener('click', () => openUserModal());
+
+    // Botões do professor
+    document.getElementById('create-room-btn')?.addEventListener('click', () => openRoomModal());
+    document.getElementById('teacher-create-quiz-btn')?.addEventListener('click', () => openTeacherQuizModal());
+    document.getElementById('create-student-btn')?.addEventListener('click', () => openTeacherUserModal());
+    
+    // Inicializar página sobre se existir
+    if (document.getElementById('about-section')) {
+        initAboutPage();
+    }
+
+    // Inicializar listeners de pesquisa
+    initSearchListeners();
+
+    window.addEventListener('beforeunload', handleQuizBeforeUnload);
+    window.addEventListener('pagehide', handleQuizBeforeUnload);
+}
+
+// Inicializar navegação por abas
+function initTabNavigation() {
+    // Abas do aluno
+    document.getElementById('quizzes-tab').addEventListener('click', () => {
+        switchTab('quizzes-tab', 'quizzes-section');
+        loadQuizzes();
+    });
+    
+    document.getElementById('ranking-tab').addEventListener('click', () => {
+        switchTab('ranking-tab', 'ranking-section');
+        loadRanking();
+    });
+    
+    document.getElementById('quiz-masters-tab').addEventListener('click', () => {
+        switchTab('quiz-masters-tab', 'quiz-masters-section');
+        loadQuizRankings();
+    });
+    
+    document.getElementById('history-tab').addEventListener('click', () => {
+        switchTab('history-tab', 'history-section');
+        loadUserHistory();
+    });
+    
+    document.getElementById('about-tab').addEventListener('click', () => {
+        switchTab('about-tab', 'about-section');
+    });
+    
+    // Abas do admin
+    document.getElementById('admin-quizzes-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quizzes-tab', 'admin-quizzes-section');
+        loadAdminQuizzes();
+    });
+    
+    document.getElementById('admin-questions-tab').addEventListener('click', () => {
+        switchAdminTab('admin-questions-tab', 'admin-questions-section');
+        loadAdminQuestions();
+    });
+    
+    document.getElementById('admin-users-tab').addEventListener('click', () => {
+        switchAdminTab('admin-users-tab', 'admin-users-section');
+        loadAdminUsers();
+    });
+    
+    document.getElementById('admin-ranking-tab').addEventListener('click', () => {
+        switchAdminTab('admin-ranking-tab', 'admin-ranking-section');
+        loadAdminRanking();
+    });
+    
+    document.getElementById('admin-quiz-masters-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quiz-masters-tab', 'admin-quiz-masters-section');
+        loadAdminQuizRankings();
+    });
+    
+    document.getElementById('admin-reports-tab').addEventListener('click', () => {
+        switchAdminTab('admin-reports-tab', 'admin-reports-section');
+        loadAdminReports();
+    });
+    
+    document.getElementById('admin-about-tab').addEventListener('click', () => {
+        switchAdminTab('admin-about-tab', 'admin-about-section');
+    });
+    
+    // Botão de sair do quiz
+    document.getElementById('exit-quiz-btn').addEventListener('click', confirmExitQuiz);
+}
+
+// Inicializar controles do quiz
+function initQuizControls() {
+    document.getElementById('prev-question').addEventListener('click', () => {
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('next-question').addEventListener('click', () => {
+        if (currentQuestionIndex < currentQuestions.length - 1) {
+            currentQuestionIndex++;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('finish-quiz').addEventListener('click', () => {
+        finishQuiz();
+    });
+    
+    // Seleção de opções
+    document.querySelectorAll('.option').forEach(option => {
+        option.addEventListener('click', function() {
+            const selectedValue = this.getAttribute('data-value');
+            selectOption(selectedValue);
+        });
+    });
+}
+
+// Inicializar modals
+function initModals() {
+    // Modal do quiz
+    document.getElementById('close-quiz-modal').addEventListener('click', closeQuizModal);
+    document.getElementById('cancel-quiz').addEventListener('click', closeQuizModal);
+    document.getElementById('save-quiz').addEventListener('click', saveQuiz);
+    
+    // Modal da questão
+    document.getElementById('close-question-modal').addEventListener('click', closeQuestionModal);
+    document.getElementById('cancel-question').addEventListener('click', closeQuestionModal);
+    document.getElementById('save-question').addEventListener('click', saveQuestion);
+    
+    // Modal do usuário
+    document.getElementById('close-user-modal').addEventListener('click', closeUserModal);
+    document.getElementById('cancel-user').addEventListener('click', closeUserModal);
+    document.getElementById('save-user').addEventListener('click', saveUser);
+    
+    // Modal de importação
+    document.getElementById('close-import-modal').addEventListener('click', closeImportModal);
+    document.getElementById('cancel-import').addEventListener('click', closeImportModal);
+    document.getElementById('import-questions').addEventListener('click', importQuestions);
+    
+    // Modal de revisão
+    document.getElementById('close-review-modal').addEventListener('click', closeReviewModal);
+    document.getElementById('close-review').addEventListener('click', closeReviewModal);
+    
+    // Fechar modals ao clicar fora
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    });
+    
+    // Event listeners para a visibilidade do quiz
+    document.getElementById('quiz-visibility').addEventListener('change', function() {
+        const specificStudentsContainer = document.getElementById('specific-students-container');
+        if (this.value === 'specific') {
+            specificStudentsContainer.classList.remove('hidden');
+            loadAvailableStudents();
+        } else {
+            specificStudentsContainer.classList.add('hidden');
+            selectedStudents = [];
+            updateSelectedStudentsDisplay();
+        }
+    });
+    
+    // Event listener para busca de alunos
+    document.getElementById('student-search')?.addEventListener('input', function() {
+        filterAvailableStudents(this.value);
+    });
+    
+    // Event listener para seleção de quiz no ranking
+    document.getElementById('quiz-master-select')?.addEventListener('change', function() {
+        loadSpecificQuizRanking(this.value);
+    });
+    
+    document.getElementById('admin-quiz-master-select')?.addEventListener('change', function() {
+        loadAdminSpecificQuizRanking(this.value);
+    });
+
+    // Modais do professor
+    document.getElementById('close-room-modal')?.addEventListener('click', closeRoomModal);
+    document.getElementById('cancel-room')?.addEventListener('click', closeRoomModal);
+    document.getElementById('save-room')?.addEventListener('click', saveRoom);
+    document.getElementById('close-teacher-quiz-modal')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('cancel-teacher-quiz')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('save-teacher-quiz')?.addEventListener('click', saveTeacherQuiz);
+    document.getElementById('close-teacher-user-modal')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('cancel-teacher-user')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('save-teacher-user')?.addEventListener('click', saveTeacherUser);
+}
+
+// Alternar entre abas do aluno
+function switchTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#student-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#student-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+// Alternar entre abas do admin
+function switchAdminTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#admin-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#admin-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+function switchTeacherTab(tabId, sectionId) {
+    const tabs = document.querySelectorAll('#teacher-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#teacher-dashboard .dashboard-content .section');
+
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+// Funções de loading
+function showLoading() {
+    loading.classList.remove('hidden');
+}
+
+function hideLoading() {
+    loading.classList.add('hidden');
+}
+
+function setCurrentUserPassword(password) {
+    currentUserPassword = password || null;
+}
+
+function clearCurrentUserPassword() {
+    currentUserPassword = null;
+}
+
+// Registrar novo usuário
+function registerUser(name, email, password, userType) {
+    showLoading();
+    auth.createUserWithEmailAndPassword(email, password)
+        .then((userCredential) => {
+            const user = userCredential.user;
+            
+            // Salvar dados adicionais do usuário no Firestore
+            return db.collection('users').doc(user.uid).set({
+                name: name,
+                email: email,
+                userType: userType,
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        })
+        .then(() => {
+            hideLoading();
+            document.getElementById('register-error').textContent = '';
+            showSuccess('register-error', 'Cadastro realizado com sucesso!');
+            
+            // Limpar formulário e mudar para login após 2 segundos
+            setTimeout(() => {
+                document.getElementById('register-form').reset();
+                switchAuthTab('login');
+            }, 2000);
+        })
+        .catch((error) => {
+            console.error('Erro ao registrar usuario:', error);
+            hideLoading();
+            showError('register-error', getAuthErrorMessage(error));
+        });
+}
+
+// Obter dados do usuário
+// Garantir documento do usuario para login social
+function ensureUserDocument(user) {
+    return db.collection('users').doc(user.uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            }
+
+            const fallbackName = user.displayName || (user.email ? user.email.split('@')[0] : 'Aluno');
+            const userData = {
+                name: fallbackName,
+                email: user.email || '',
+                userType: 'aluno',
+                status: 'active',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            return db.collection('users').doc(user.uid).set(userData).then(() => userData);
+        });
+}
+
+// Login com Google
+function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
+
+    showLoading();
+    auth.signInWithPopup(provider)
+        .then((result) => ensureUserDocument(result.user))
+        .then(userData => {
+            if (userData && userData.status === 'inactive' && userData.userType === 'aluno') {
+                return auth.signOut().then(() => {
+                    hideLoading();
+                    showError('login-error', 'Sua conta foi desativada. Entre em contato com o administrador.');
+                });
+            }
+
+            document.getElementById('login-error').textContent = '';
+            hideLoading();
+        })
+        .catch((error) => {
+            console.error('Erro no login com Google:', error);
+
+            // Erro comum: provedor Google não habilitado no Firebase (operation-not-allowed)
+            if (error && error.code === 'auth/operation-not-allowed') {
+                hideLoading();
+                showError('login-error', 'Login com Google não habilitado no projeto Firebase. Para habilitar, acesse o Firebase Console, vá para a aba "Authentication" > "Sign-in method" e ative o provedor "Google". Certifique-se também de adicionar o domínio (ex: localhost) na lista de domínios autorizados.');
+                return;
+            }
+
+            // Popup bloqueado ou similar: tentar fallback para redirect
+            if (error && (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request')) {
+                console.warn('Popup bloqueado ou fechado. Tentando fallback com redirect...');
+                // Não chamamos hideLoading() aqui porque será tratado no redirect flow
+                auth.signInWithRedirect(provider);
+                return;
+            }
+
+            hideLoading();
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}
+
+function getUserData(uid) {
+    return db.collection('users').doc(uid).get()
+        .then(doc => {
+            if (doc.exists) {
+                return doc.data();
+            } else {
+                throw new Error('Usuário não encontrado');
+            }
+        });
+}
+
+// Inicializar event listeners
+function initEventListeners() {
+    // Logout
+    document.getElementById('student-logout').addEventListener('click', logout);
+    document.getElementById('admin-logout').addEventListener('click', logout);
+    document.getElementById('teacher-logout')?.addEventListener('click', logout);
+    
+    // Navegação entre abas
+    initTabNavigation();
+    
+    // Controles do quiz
+    initQuizControls();
+    
+    // Navegação dos resultados
+    document.getElementById('back-to-dashboard').addEventListener('click', () => {
+        showDashboard();
+    });
+    
+    document.getElementById('new-quiz').addEventListener('click', () => {
+        showDashboard();
+        setTimeout(() => {
+            if (currentUser.userType === 'aluno') {
+                switchTab('quizzes-tab', 'quizzes-section');
+                loadQuizzes();
+            }
+        }, 100);
+    });
+    
+    document.getElementById('review-quiz').addEventListener('click', handleReviewClick);
+    
+    // Botões do admin
+    document.getElementById('create-quiz-btn').addEventListener('click', () => openQuizModal());
+    document.getElementById('create-question-btn').addEventListener('click', () => openQuestionModal());
+    document.getElementById('import-questions-btn').addEventListener('click', openImportModal);
+    document.getElementById('create-user-btn')?.addEventListener('click', () => openUserModal());
+
+    // Botões do professor
+    document.getElementById('create-room-btn')?.addEventListener('click', () => openRoomModal());
+    document.getElementById('teacher-create-quiz-btn')?.addEventListener('click', () => openTeacherQuizModal());
+    document.getElementById('create-student-btn')?.addEventListener('click', () => openTeacherUserModal());
+    
+    // Inicializar página sobre se existir
+    if (document.getElementById('about-section')) {
+        initAboutPage();
+    }
+
+    // Inicializar listeners de pesquisa
+    initSearchListeners();
+
+    window.addEventListener('beforeunload', handleQuizBeforeUnload);
+    window.addEventListener('pagehide', handleQuizBeforeUnload);
+}
+
+// Inicializar navegação por abas
+function initTabNavigation() {
+    // Abas do aluno
+    document.getElementById('quizzes-tab').addEventListener('click', () => {
+        switchTab('quizzes-tab', 'quizzes-section');
+        loadQuizzes();
+    });
+    
+    document.getElementById('ranking-tab').addEventListener('click', () => {
+        switchTab('ranking-tab', 'ranking-section');
+        loadRanking();
+    });
+    
+    document.getElementById('quiz-masters-tab').addEventListener('click', () => {
+        switchTab('quiz-masters-tab', 'quiz-masters-section');
+        loadQuizRankings();
+    });
+    
+    document.getElementById('history-tab').addEventListener('click', () => {
+        switchTab('history-tab', 'history-section');
+        loadUserHistory();
+    });
+    
+    document.getElementById('about-tab').addEventListener('click', () => {
+        switchTab('about-tab', 'about-section');
+    });
+    
+    // Abas do admin
+    document.getElementById('admin-quizzes-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quizzes-tab', 'admin-quizzes-section');
+        loadAdminQuizzes();
+    });
+    
+    document.getElementById('admin-questions-tab').addEventListener('click', () => {
+        switchAdminTab('admin-questions-tab', 'admin-questions-section');
+        loadAdminQuestions();
+    });
+    
+    document.getElementById('admin-users-tab').addEventListener('click', () => {
+        switchAdminTab('admin-users-tab', 'admin-users-section');
+        loadAdminUsers();
+    });
+    
+    document.getElementById('admin-ranking-tab').addEventListener('click', () => {
+        switchAdminTab('admin-ranking-tab', 'admin-ranking-section');
+        loadAdminRanking();
+    });
+    
+    document.getElementById('admin-quiz-masters-tab').addEventListener('click', () => {
+        switchAdminTab('admin-quiz-masters-tab', 'admin-quiz-masters-section');
+        loadAdminQuizRankings();
+    });
+    
+    document.getElementById('admin-reports-tab').addEventListener('click', () => {
+        switchAdminTab('admin-reports-tab', 'admin-reports-section');
+        loadAdminReports();
+    });
+    
+    document.getElementById('admin-about-tab').addEventListener('click', () => {
+        switchAdminTab('admin-about-tab', 'admin-about-section');
+    });
+    
+    // Botão de sair do quiz
+    document.getElementById('exit-quiz-btn').addEventListener('click', confirmExitQuiz);
+}
+
+// Inicializar controles do quiz
+function initQuizControls() {
+    document.getElementById('prev-question').addEventListener('click', () => {
+        if (currentQuestionIndex > 0) {
+            currentQuestionIndex--;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('next-question').addEventListener('click', () => {
+        if (currentQuestionIndex < currentQuestions.length - 1) {
+            currentQuestionIndex++;
+            displayQuestion();
+        }
+    });
+    
+    document.getElementById('finish-quiz').addEventListener('click', () => {
+        finishQuiz();
+    });
+    
+    // Seleção de opções
+    document.querySelectorAll('.option').forEach(option => {
+        option.addEventListener('click', function() {
+            const selectedValue = this.getAttribute('data-value');
+            selectOption(selectedValue);
+        });
+    });
+}
+
+// Inicializar modals
+function initModals() {
+    // Modal do quiz
+    document.getElementById('close-quiz-modal').addEventListener('click', closeQuizModal);
+    document.getElementById('cancel-quiz').addEventListener('click', closeQuizModal);
+    document.getElementById('save-quiz').addEventListener('click', saveQuiz);
+    
+    // Modal da questão
+    document.getElementById('close-question-modal').addEventListener('click', closeQuestionModal);
+    document.getElementById('cancel-question').addEventListener('click', closeQuestionModal);
+    document.getElementById('save-question').addEventListener('click', saveQuestion);
+    
+    // Modal do usuário
+    document.getElementById('close-user-modal').addEventListener('click', closeUserModal);
+    document.getElementById('cancel-user').addEventListener('click', closeUserModal);
+    document.getElementById('save-user').addEventListener('click', saveUser);
+    
+    // Modal de importação
+    document.getElementById('close-import-modal').addEventListener('click', closeImportModal);
+    document.getElementById('cancel-import').addEventListener('click', closeImportModal);
+    document.getElementById('import-questions').addEventListener('click', importQuestions);
+    
+    // Modal de revisão
+    document.getElementById('close-review-modal').addEventListener('click', closeReviewModal);
+    document.getElementById('close-review').addEventListener('click', closeReviewModal);
+    
+    // Fechar modals ao clicar fora
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.add('hidden');
+            }
+        });
+    });
+    
+    // Event listeners para a visibilidade do quiz
+    document.getElementById('quiz-visibility').addEventListener('change', function() {
+        const specificStudentsContainer = document.getElementById('specific-students-container');
+        if (this.value === 'specific') {
+            specificStudentsContainer.classList.remove('hidden');
+            loadAvailableStudents();
+        } else {
+            specificStudentsContainer.classList.add('hidden');
+            selectedStudents = [];
+            updateSelectedStudentsDisplay();
+        }
+    });
+    
+    // Event listener para busca de alunos
+    document.getElementById('student-search')?.addEventListener('input', function() {
+        filterAvailableStudents(this.value);
+    });
+    
+    // Event listener para seleção de quiz no ranking
+    document.getElementById('quiz-master-select')?.addEventListener('change', function() {
+        loadSpecificQuizRanking(this.value);
+    });
+    
+    document.getElementById('admin-quiz-master-select')?.addEventListener('change', function() {
+        loadAdminSpecificQuizRanking(this.value);
+    });
+
+    // Modais do professor
+    document.getElementById('close-room-modal')?.addEventListener('click', closeRoomModal);
+    document.getElementById('cancel-room')?.addEventListener('click', closeRoomModal);
+    document.getElementById('save-room')?.addEventListener('click', saveRoom);
+    document.getElementById('close-teacher-quiz-modal')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('cancel-teacher-quiz')?.addEventListener('click', closeTeacherQuizModal);
+    document.getElementById('save-teacher-quiz')?.addEventListener('click', saveTeacherQuiz);
+    document.getElementById('close-teacher-user-modal')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('cancel-teacher-user')?.addEventListener('click', closeTeacherUserModal);
+    document.getElementById('save-teacher-user')?.addEventListener('click', saveTeacherUser);
+}
+
+// Alternar entre abas do aluno
+function switchTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#student-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#student-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+// Alternar entre abas do admin
+function switchAdminTab(tabId, sectionId) {
+    // Remover classe active de todas as abas e seções
+    const tabs = document.querySelectorAll('#admin-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#admin-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
+
+function switchTeacherTab(tabId, sectionId) {
+    const tabs = document.querySelectorAll('#student-dashboard .dashboard-header .tab');
+    const sections = document.querySelectorAll('#student-dashboard .dashboard-content .section');
+    
+    tabs.forEach(tab => tab.classList.remove('active'));
+    sections.forEach(section => section.classList.remove('active'));
+    
+    // Adicionar classe active à aba e seção selecionadas
+    document.getElementById(tabId).classList.add('active');
+    document.getElementById(sectionId).classList.add('active');
+}
