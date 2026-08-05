@@ -812,6 +812,7 @@ function ensureUserDocument(user) {
 
 // Login com Google
 function signInWithGoogle() {
+    console.log("signInWithGoogle called");
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1201,6 +1202,7 @@ function ensureUserDocument(user) {
 
 // Login com Google
 function signInWithGoogle() {
+    console.log("signInWithGoogle called");
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1590,6 +1592,7 @@ function ensureUserDocument(user) {
 
 // Login com Google
 function signInWithGoogle() {
+    console.log("signInWithGoogle called");
     const provider = new firebase.auth.GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
 
@@ -1968,9 +1971,6 @@ function ensureUserDocument(user) {
                 name: fallbackName,
                 email: user.email || '',
                 userType: 'aluno',
-                status: 'active',
-                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
 
             return db.collection('users').doc(user.uid).set(userData).then(() => userData);
