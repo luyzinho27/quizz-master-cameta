@@ -958,6 +958,34 @@ function showAuth() {
     authContainer.classList.remove('hidden');
 }
 
+// Função para confirmar e sair do quiz
+function confirmExitQuiz() {
+    // Se não houver quiz ativo, apenas exibe o dashboard
+    if (!currentQuiz) {
+        showDashboard();
+        return;
+    }
+    const confirmMsg = 'Tem certeza que deseja sair do quiz? Todas as respostas não salvas serão perdidas.';
+    if (!confirm(confirmMsg)) {
+        return;
+    }
+    // Limpar estado local do quiz
+    if (currentUser && currentQuiz) {
+        clearQuizStateLocal(currentUser.uid, currentQuiz.id);
+    }
+    // Resetar variáveis de estado
+    currentQuiz = null;
+    currentQuestions = [];
+    currentQuestionIndex = 0;
+    userAnswers = [];
+    quizTimer = null;
+    timeRemaining = 0;
+    totalTime = 0;
+    quizActive = false;
+    // Exibir dashboard principal
+    showDashboard();
+}
+
 // Função de logout
 function logout() {
     auth.signOut()
@@ -979,6 +1007,8 @@ window.hideDashboard = hideDashboard;
 window.logout = logout;
 window.showAuth = showAuth;
 window.hideDashboard = hideDashboard;
+// Expose confirmExitQuiz for inline handlers
+window.confirmExitQuiz = confirmExitQuiz;
 
 // Inicializar navegação por abas
 function initTabNavigation() {
