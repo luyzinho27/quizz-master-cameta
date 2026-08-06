@@ -22,7 +22,7 @@ if (!firebaseConfig) {
     throw new Error(message);
 }
 
-// Inicializar Firebase
+// Inicializar Firebase.
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
@@ -958,6 +958,26 @@ function showAuth() {
     authContainer.classList.remove('hidden');
 }
 
+// Exibe o dashboard apropriado com base no tipo de usuário
+function showDashboard() {
+    hideDashboard();
+    if (!currentUser) {
+        showAuth();
+        return;
+    }
+    const type = currentUser.userType;
+    if (type === 'aluno') {
+        studentDashboard.classList.remove('hidden');
+    } else if (type === 'admin') {
+        adminDashboard.classList.remove('hidden');
+    } else if (type === 'professor' || type === 'prof') {
+        teacherDashboard.classList.remove('hidden');
+    } else {
+        // Caso o tipo não seja reconhecido, exibe a tela de autenticação
+        showAuth();
+    }
+}
+
 // Função para confirmar e sair do quiz
 function confirmExitQuiz() {
     // Se não houver quiz ativo, apenas exibe o dashboard
@@ -1003,6 +1023,7 @@ function logout() {
 window.logout = logout;
 window.showAuth = showAuth;
 window.hideDashboard = hideDashboard;
+window.showDashboard = showDashboard;
 // Expose functions to global scope for inline HTML handlers
 window.logout = logout;
 window.showAuth = showAuth;
