@@ -22,7 +22,7 @@ if (!firebaseConfig) {
     throw new Error(message);
 }
 
-// Inicializar Firebase.
+// Inicializar Firebase
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
