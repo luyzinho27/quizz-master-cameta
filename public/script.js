@@ -443,7 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
             showLoading();
             ensureUserDocument(user).then(userData => {
                 // Verificar se o usuário está ativo
-                if (userData.status === 'inactive' && userData.userType === 'aluno') {
+                if (userData.status === 'active' && userData.userType === 'aluno') {
                     auth.signOut();
                     hideLoading();
                     alert('Sua conta foi desativada. Entre em contato com o administrador.');
@@ -565,7 +565,9 @@ function createUserAccount({ name, email, password, userType, status = 'active',
 function initAuth() {
     console.log('Iniciando autenticação...');
 }
-    const loginTab = document.getElementById('login-tab');
+// End of initAuth function
+// The following code initializes UI elements and event listeners
+const loginTab = document.getElementById('login-tab');
     const registerTab = document.getElementById('register-tab');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
@@ -939,6 +941,44 @@ function initEventListeners() {
     window.addEventListener('beforeunload', handleQuizBeforeUnload);
     window.addEventListener('pagehide', handleQuizBeforeUnload);
 }
+
+// Funções auxiliares de navegação
+function hideDashboard() {
+    // Oculta todas as seções de dashboard e mostra o container de autenticação
+    authContainer.classList.add('hidden');
+    studentDashboard.classList.add('hidden');
+    adminDashboard.classList.add('hidden');
+    teacherDashboard.classList.add('hidden');
+    quizContainer.classList.add('hidden');
+    quizResult.classList.add('hidden');
+}
+
+function showAuth() {
+    hideDashboard();
+    authContainer.classList.remove('hidden');
+}
+
+// Função de logout
+function logout() {
+    auth.signOut()
+        .then(() => {
+            hideDashboard();
+            showAuth();
+        })
+        .catch(error => {
+            console.error('Erro ao sair:', error);
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}
+
+// Expor funções que podem ser chamadas a partir de atributos HTML
+window.logout = logout;
+window.showAuth = showAuth;
+window.hideDashboard = hideDashboard;
+// Expose functions to global scope for inline HTML handlers
+window.logout = logout;
+window.showAuth = showAuth;
+window.hideDashboard = hideDashboard;
 
 // Inicializar navegação por abas
 function initTabNavigation() {
