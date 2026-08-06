@@ -442,8 +442,8 @@ document.addEventListener('DOMContentLoaded', function() {
             // Usuário está logado
             showLoading();
             ensureUserDocument(user).then(userData => {
-                // Verificar se o usuário está ativo
-                if (userData.status === 'active' && userData.userType === 'aluno') {
+                // Verificar se o usuário está inativo
+                if (userData.status === 'inactive' && userData.userType === 'aluno') {
                     auth.signOut();
                     hideLoading();
                     alert('Sua conta foi desativada. Entre em contato com o administrador.');
