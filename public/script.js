@@ -521,6 +521,15 @@ function showError(elementId, message) {
         el.textContent = message;
     }
 }
+// Função auxiliar para traduzir mensagens de erro do Firebase Auth
+function getAuthErrorMessage(error) {
+    if (!error) return 'Erro desconhecido.';
+    if (error.message) return error.message;
+    if (error.code) return error.code;
+    return 'Erro desconhecido.';
+}
+// Exporar para o escopo global (caso o script seja executado em um contexto que não exponha funções declaradas)
+window.showError = showError;
 
 function createUserAccount({ name, email, password, userType, status = 'active', extraData = {} }) {
     const previousAuthUser = auth.currentUser;
@@ -555,7 +564,7 @@ function createUserAccount({ name, email, password, userType, status = 'active',
 // Inicializar autenticação
 function initAuth() {
     console.log('Iniciando autenticação...');
-} {
+}
     const loginTab = document.getElementById('login-tab');
     const registerTab = document.getElementById('register-tab');
     const loginForm = document.getElementById('login-form');
@@ -602,7 +611,11 @@ function initAuth() {
             .catch((error) => {
                 console.error('Erro no login com e-mail e senha:', error);
                 hideLoading();
-                showError('login-error', getAuthErrorMessage(error));
+                if (error && error.code === 'auth/operation-not-allowed') {
+                    showError('login-error', 'Login com e-mail e senha não habilitado no projeto Firebase. Ative-o no console Firebase, na aba "Authentication" > "Sign-in method".');
+                } else {
+                    showError('login-error', getAuthErrorMessage(error));
+                }
             });
     });
     
@@ -703,7 +716,6 @@ function initAuth() {
             }
         });
     });
-}
 
 // Alternar visibilidade da senha
 function togglePasswordVisibility(passwordFieldId, toggleIcon) {
