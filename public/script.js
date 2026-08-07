@@ -703,7 +703,12 @@ function checkAdminExists() {
         })
         .catch(error => {
             console.error('Erro ao verificar administradores:', error);
-            return false;
+            const adminOption = document.getElementById('admin-option');
+            if (adminOption) {
+                adminOption.disabled = true;
+                adminOption.textContent = 'Administrador (verificacao indisponivel)';
+            }
+            return true;
         });
 }
 
@@ -1082,7 +1087,9 @@ function initEventListeners() {
     safeOn('create-user-btn', 'click', () => invokeIfAvailable('openUserModal'));
 
     safeOn('create-room-btn', 'click', () => invokeIfAvailable('openRoomModal'));
+    safeOn('admin-create-room-btn', 'click', () => invokeIfAvailable('openRoomModal'));
     safeOn('teacher-create-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
+    safeOn('admin-create-room-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
     safeOn('create-student-btn', 'click', () => invokeIfAvailable('openTeacherUserModal'));
     safeOn('exit-quiz-btn', 'click', confirmExitQuiz);
 
@@ -1120,6 +1127,10 @@ function initTabNavigation() {
     safeOn('admin-users-tab', 'click', () => {
         switchAdminTab('admin-users-tab', 'admin-users-section');
         invokeIfAvailable('loadAdminUsers');
+    });
+    safeOn('admin-rooms-tab', 'click', () => {
+        switchAdminTab('admin-rooms-tab', 'admin-rooms-section');
+        invokeIfAvailable('loadAdminRooms');
     });
     safeOn('admin-ranking-tab', 'click', () => {
         switchAdminTab('admin-ranking-tab', 'admin-ranking-section');
@@ -1227,3 +1238,1246 @@ window.showAuth = showAuth;
 window.hideDashboard = hideDashboard;
 window.showDashboard = showDashboard;
 window.confirmExitQuiz = confirmExitQuiz;
+
+// Camada funcional de CRUD para Admin e Professor.
+function formatDate(value) {
+    if (!value) return 'N/A';
+    if (value.toDate) return value.toDate().toLocaleDateString('pt-BR');
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? 'N/A' : date.toLocaleDateString('pt-BR');
+}
+
+function getValue(id) {
+    const element = document.getElementById(id);
+    return element ? element.value.trim() : '';
+}
+
+function setValue(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.value = value || '';
+}
+
+function setChecked(id, checked) {
+    const element = document.getElementById(id);
+    if (element) element.checked = Boolean(checked);
+}
+
+function setListLoading(id, text) {
+    const list = document.getElementById(id);
+    if (list) list.innerHTML = `<div class="card"><div class="card-content">${text}</div></div>`;
+    return list;
+}
+
+function setListEmpty(id, text) {
+    const list = document.getElementById(id);
+    if (list) list.innerHTML = `<div class="card"><div class="card-content">${text}</div></div>`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function isAdminUser() {
+    return currentUser && currentUser.userType === 'admin';
+}
+
+function isTeacherUser() {
+    return currentUser && (currentUser.userType === 'professor' || currentUser.userType === 'prof');
+}
+
+function canManageTeacherResources() {
+    return isAdminUser() || isTeacherUser();
+}
+
+function getOwnerPayload() {
+    if (isAdminUser()) {
+        return {
+            ownerId: currentUser.uid,
+            ownerName: currentUser.name || currentUser.email || 'Administrador',
+            ownerType: 'admin'
+        };
+    }
+
+    return {
+        teacherId: currentUser.uid,
+        teacherName: currentUser.name || currentUser.email || 'Professor',
+        ownerId: currentUser.uid,
+        ownerName: currentUser.name || currentUser.email || 'Professor',
+        ownerType: 'professor'
+    };
+}
+
+function addClickHandler(selector, handler) {
+    document.querySelectorAll(selector).forEach(element => {
+        element.addEventListener('click', handler);
+    });
+}
+
+function firebaseOrderByCreatedDesc(items) {
+    return items.sort((a, b) => {
+        const aTime = getTimestampMs(a.createdAt) || 0;
+        const bTime = getTimestampMs(b.createdAt) || 0;
+        return bTime - aTime;
+    });
+}
+
+function fetchCollection(name) {
+    return db.collection(name).get().then(snapshot => {
+        const items = [];
+        snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+        return items;
+    });
+}
+
+function fetchUsersByType(userType) {
+    return fetchCollection('users').then(users => users.filter(user => user.userType === userType));
+}
+
+function createManagedAuthUser(email, password) {
+    const secondaryName = `secondary-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const secondaryApp = firebase.initializeApp(firebaseConfig, secondaryName);
+    const secondaryAuth = secondaryApp.auth();
+
+    return secondaryAuth.createUserWithEmailAndPassword(email, password)
+        .then(credential => secondaryAuth.signOut().then(() => credential.user))
+        .finally(() => secondaryApp.delete());
+}
+
+function createManagedUser({ name, email, password, userType, status = 'active', roomIds = [] }) {
+    if (!password || password.length < 6) {
+        return Promise.reject(new Error('Informe uma senha temporaria com pelo menos 6 caracteres.'));
+    }
+
+    return createManagedAuthUser(email, password).then(authUser => {
+        const userData = {
+            name,
+            email,
+            userType,
+            status,
+            roomIds,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        return db.collection('users').doc(authUser.uid).set(userData, { merge: true })
+            .then(() => ({ id: authUser.uid, ...userData }));
+    });
+}
+
+function ensureAdminTeacherTabs() {
+    const adminNav = document.querySelector('#admin-dashboard .dashboard-header .tabs');
+    const adminContent = document.querySelector('#admin-dashboard .dashboard-content');
+
+    if (adminNav && !document.getElementById('admin-rooms-tab')) {
+        const roomsTab = document.createElement('button');
+        roomsTab.id = 'admin-rooms-tab';
+        roomsTab.className = 'tab';
+        roomsTab.innerHTML = '<i class="fas fa-door-open"></i><span class="tab-text">Salas</span>';
+        const usersTab = document.getElementById('admin-users-tab');
+        adminNav.insertBefore(roomsTab, usersTab ? usersTab.nextSibling : null);
+    }
+
+    if (adminContent && !document.getElementById('admin-rooms-section')) {
+        const roomsSection = document.createElement('div');
+        roomsSection.id = 'admin-rooms-section';
+        roomsSection.className = 'section';
+        roomsSection.innerHTML = `
+            <div class="section-header">
+                <h2>Gerenciar Salas</h2>
+                <p>Crie turmas, adicione alunos e organize quizzes por sala</p>
+                <button id="admin-create-room-btn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i>
+                    <span class="btn-text">Criar Sala</span>
+                </button>
+            </div>
+            <div id="admin-rooms-list" class="cards-container"></div>
+        `;
+        const usersSection = document.getElementById('admin-users-section');
+        adminContent.insertBefore(roomsSection, usersSection || null);
+    }
+
+}
+
+function updateRegisterAdminOption() {
+    const adminOption = document.getElementById('admin-option');
+    if (!adminOption) return Promise.resolve(false);
+
+    return checkAdminExists().then(adminExists => {
+        if (adminExists) {
+            adminOption.disabled = true;
+            adminOption.textContent = 'Administrador (somente pelo Admin)';
+            const registerType = document.getElementById('register-type');
+            if (registerType && registerType.value === 'admin') registerType.value = 'aluno';
+        }
+        return adminExists;
+    });
+}
+
+const originalSwitchAuthTab = switchAuthTab;
+switchAuthTab = function(tab) {
+    originalSwitchAuthTab(tab);
+    if (tab === 'register') updateRegisterAdminOption();
+};
+
+function loadInitialDashboardData() {
+    if (!currentUser) return;
+
+    if (currentUser.userType === 'aluno') {
+        setText('student-name', currentUser.name || currentUser.email || '');
+        loadQuizzes();
+        return;
+    }
+
+    if (isAdminUser()) {
+        setText('admin-name', currentUser.name || currentUser.email || '');
+        ensureAdminTeacherTabs();
+        loadAdminQuizzes();
+        return;
+    }
+
+    if (isTeacherUser()) {
+        setText('teacher-name', currentUser.name || currentUser.email || '');
+        loadTeacherRooms();
+    }
+}
+
+function setText(id, value) {
+    const element = document.getElementById(id);
+    if (element) element.textContent = value || '';
+}
+
+const originalShowDashboard = showDashboard;
+showDashboard = function() {
+    originalShowDashboard();
+    loadInitialDashboardData();
+};
+window.showDashboard = showDashboard;
+
+const originalInitEventListeners = initEventListeners;
+initEventListeners = function() {
+    ensureAdminTeacherTabs();
+    originalInitEventListeners();
+    safeOn('admin-users-search', 'input', event => filterAdminUsers(event.target.value));
+};
+window.initEventListeners = initEventListeners;
+
+document.addEventListener('DOMContentLoaded', () => {
+    updateRegisterAdminOption();
+});
+
+function loadQuestionCategories() {
+    return db.collection('questions').get().then(snapshot => {
+        const categories = new Set();
+        snapshot.forEach(doc => {
+            const category = doc.data().category;
+            if (category) categories.add(category);
+        });
+        return Array.from(categories).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+    });
+}
+
+function populateCategorySelect(selectId, selectedValue = '') {
+    const select = document.getElementById(selectId);
+    if (!select) return Promise.resolve();
+
+    select.innerHTML = '<option value="">Carregando categorias...</option>';
+    return loadQuestionCategories().then(categories => {
+        select.innerHTML = '<option value="">Selecione uma categoria</option>';
+        categories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            select.appendChild(option);
+        });
+        if (selectedValue) select.value = selectedValue;
+    });
+}
+
+function loadAvailableStudents(containerId = 'available-students-list', selectedIds = []) {
+    const container = document.getElementById(containerId);
+    if (!container) return Promise.resolve([]);
+
+    container.innerHTML = '<p>Carregando alunos...</p>';
+    return fetchUsersByType('aluno').then(students => {
+        availableStudents = students.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
+
+        if (availableStudents.length === 0) {
+            container.innerHTML = '<p>Nenhum aluno cadastrado.</p>';
+            return availableStudents;
+        }
+
+        container.innerHTML = availableStudents.map(student => `
+            <label class="checkbox-row" style="margin-bottom: 0.5rem;">
+                <input type="checkbox" value="${escapeHtml(student.id)}" data-student-id="${escapeHtml(student.id)}" ${selectedIds.includes(student.id) ? 'checked' : ''}>
+                <span>${escapeHtml(student.name || student.email || 'Aluno')}</span>
+            </label>
+        `).join('');
+
+        return availableStudents;
+    });
+}
+
+function selectedStudentIdsFrom(containerId) {
+    return Array.from(document.querySelectorAll(`#${containerId} input[type="checkbox"]:checked`))
+        .map(input => input.value);
+}
+
+function updateSelectedStudentsDisplay() {
+    const display = document.getElementById('selected-students');
+    if (!display) return;
+    if (!selectedStudents.length) {
+        display.innerHTML = '<p>Nenhum aluno selecionado</p>';
+        return;
+    }
+    display.innerHTML = selectedStudents.map(student => `<span class="card-badge">${escapeHtml(student.name)}</span>`).join(' ');
+}
+
+function addStudentToSelection(studentId, name) {
+    if (!selectedStudents.some(student => student.id === studentId)) {
+        selectedStudents.push({ id: studentId, name });
+        updateSelectedStudentsDisplay();
+    }
+}
+
+function filterAvailableStudents(term) {
+    const normalized = (term || '').trim().toLowerCase();
+    document.querySelectorAll('#available-students-list label').forEach(label => {
+        label.style.display = label.textContent.toLowerCase().includes(normalized) ? '' : 'none';
+    });
+}
+
+function openRoomModal(roomId = null) {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+    editingRoomId = roomId;
+    setText('room-modal-title', roomId ? 'Editar Sala' : 'Criar Sala');
+    setValue('room-name', '');
+    setValue('room-description', '');
+    setValue('room-status', 'active');
+
+    const loadRoom = roomId
+        ? db.collection('rooms').doc(roomId).get().then(doc => {
+            if (!doc.exists) throw new Error('Sala nao encontrada.');
+            const room = doc.data();
+            setValue('room-name', room.name);
+            setValue('room-description', room.description || '');
+            setValue('room-status', room.status || 'active');
+            return room.studentIds || [];
+        })
+        : Promise.resolve([]);
+
+    loadRoom
+        .then(selectedIds => loadAvailableStudents('room-students-list', selectedIds))
+        .then(() => document.getElementById('room-modal').classList.remove('hidden'))
+        .catch(error => alert('Erro ao abrir sala: ' + getAuthErrorMessage(error)));
+}
+
+function closeRoomModal() {
+    document.getElementById('room-modal').classList.add('hidden');
+    editingRoomId = null;
+}
+
+function saveRoom() {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+
+    const name = getValue('room-name');
+    if (!name) return alert('Informe o nome da sala.');
+
+    const roomData = {
+        name,
+        description: getValue('room-description'),
+        status: getValue('room-status') || 'active',
+        studentIds: selectedStudentIdsFrom('room-students-list'),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        ...getOwnerPayload()
+    };
+
+    const request = editingRoomId
+        ? db.collection('rooms').doc(editingRoomId).set(roomData, { merge: true })
+        : db.collection('rooms').add({ ...roomData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+    request.then(() => {
+        alert('Sala salva com sucesso!');
+        closeRoomModal();
+        isAdminUser() ? loadAdminRooms() : loadTeacherRooms();
+    }).catch(error => alert('Erro ao salvar sala: ' + getAuthErrorMessage(error)));
+}
+
+function roomVisibleForCurrentUser(room) {
+    return isAdminUser() || room.teacherId === currentUser.uid || room.ownerId === currentUser.uid;
+}
+
+function getManagedRooms() {
+    return fetchCollection('rooms').then(rooms => firebaseOrderByCreatedDesc(rooms.filter(roomVisibleForCurrentUser)));
+}
+
+function renderRooms(listId, rooms) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    if (!rooms.length) return setListEmpty(listId, 'Nenhuma sala cadastrada.');
+
+    list.innerHTML = rooms.map(room => `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">${escapeHtml(room.name)}</h3>
+                <span class="card-badge ${room.status === 'active' ? '' : 'card-badge-secondary'}">${room.status === 'active' ? 'Ativa' : 'Inativa'}</span>
+            </div>
+            <div class="card-content">
+                <p>${escapeHtml(room.description || 'Sem descricao')}</p>
+                <p><strong>Alunos:</strong> ${(room.studentIds || []).length}</p>
+                <p><strong>Responsavel:</strong> ${escapeHtml(room.teacherName || room.ownerName || 'N/A')}</p>
+                <p><strong>Criada em:</strong> ${formatDate(room.createdAt)}</p>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-primary room-edit" data-id="${escapeHtml(room.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-danger room-delete" data-id="${escapeHtml(room.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    addClickHandler(`#${listId} .room-edit`, event => openRoomModal(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .room-delete`, event => deleteRoom(event.currentTarget.dataset.id));
+}
+
+function loadTeacherRooms() {
+    setListLoading('teacher-rooms-list', 'Carregando salas...');
+    return getManagedRooms()
+        .then(rooms => {
+            teacherRoomsCache = rooms;
+            renderRooms('teacher-rooms-list', rooms);
+        })
+        .catch(error => {
+            console.error('Erro ao carregar salas:', error);
+            setListEmpty('teacher-rooms-list', 'Erro ao carregar salas.');
+        });
+}
+
+function loadAdminRooms() {
+    setListLoading('admin-rooms-list', 'Carregando salas...');
+    return getManagedRooms()
+        .then(rooms => renderRooms('admin-rooms-list', rooms))
+        .catch(error => {
+            console.error('Erro ao carregar salas:', error);
+            setListEmpty('admin-rooms-list', 'Erro ao carregar salas.');
+        });
+}
+
+function deleteRoom(roomId) {
+    if (!confirm('Tem certeza que deseja excluir esta sala?')) return;
+    db.collection('rooms').doc(roomId).delete()
+        .then(() => {
+            alert('Sala excluida com sucesso!');
+            isAdminUser() ? loadAdminRooms() : loadTeacherRooms();
+        })
+        .catch(error => alert('Erro ao excluir sala: ' + getAuthErrorMessage(error)));
+}
+
+function openTeacherQuizModal(quizId = null) {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+    editingTeacherQuizId = quizId;
+    setText('teacher-quiz-modal-title', quizId ? 'Editar Quiz da Sala' : 'Criar Quiz da Sala');
+    ['teacher-quiz-title', 'teacher-quiz-description', 'teacher-quiz-questions-count', 'teacher-quiz-time'].forEach(id => setValue(id, ''));
+    setValue('teacher-quiz-status', 'active');
+    setChecked('teacher-allow-review', true);
+
+    Promise.all([populateCategorySelect('teacher-quiz-category'), getManagedRooms()])
+        .then(([, rooms]) => {
+            const roomSelect = document.getElementById('teacher-quiz-room');
+            roomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
+            rooms.filter(room => room.status !== 'inactive').forEach(room => {
+                const option = document.createElement('option');
+                option.value = room.id;
+                option.textContent = room.name;
+                roomSelect.appendChild(option);
+            });
+
+            if (!quizId) return null;
+            return db.collection('quizzes').doc(quizId).get().then(doc => {
+                if (!doc.exists) throw new Error('Quiz nao encontrado.');
+                const quiz = doc.data();
+                setValue('teacher-quiz-title', quiz.title);
+                setValue('teacher-quiz-description', quiz.description || '');
+                setValue('teacher-quiz-category', quiz.category || '');
+                setValue('teacher-quiz-room', quiz.roomId || '');
+                setValue('teacher-quiz-questions-count', quiz.questionsCount || '');
+                setValue('teacher-quiz-time', quiz.time || '');
+                setValue('teacher-quiz-status', quiz.status || 'active');
+                setChecked('teacher-allow-review', quiz.allowReview !== false);
+            });
+        })
+        .then(() => document.getElementById('teacher-quiz-modal').classList.remove('hidden'))
+        .catch(error => alert('Erro ao abrir quiz: ' + getAuthErrorMessage(error)));
+}
+
+function closeTeacherQuizModal() {
+    document.getElementById('teacher-quiz-modal').classList.add('hidden');
+    editingTeacherQuizId = null;
+}
+
+function saveTeacherQuiz() {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+    const title = getValue('teacher-quiz-title');
+    const category = getValue('teacher-quiz-category');
+    const roomId = getValue('teacher-quiz-room');
+    const questionsCount = Number(getValue('teacher-quiz-questions-count'));
+    const time = Number(getValue('teacher-quiz-time'));
+
+    if (!title || !category || !roomId || !questionsCount || !time) {
+        return alert('Preencha titulo, categoria, sala, numero de questoes e tempo.');
+    }
+
+    const quizData = {
+        title,
+        description: getValue('teacher-quiz-description'),
+        category,
+        roomId,
+        questionsCount,
+        time,
+        status: getValue('teacher-quiz-status') || 'active',
+        visibility: 'room',
+        allowReview: document.getElementById('teacher-allow-review').checked,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        ...getOwnerPayload()
+    };
+
+    const request = editingTeacherQuizId
+        ? db.collection('quizzes').doc(editingTeacherQuizId).set(quizData, { merge: true })
+        : db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+    request.then(() => {
+        alert('Quiz salvo com sucesso!');
+        closeTeacherQuizModal();
+        isAdminUser() ? loadAdminQuizzes() : loadTeacherQuizzes();
+    }).catch(error => alert('Erro ao salvar quiz: ' + getAuthErrorMessage(error)));
+}
+
+function quizVisibleForCurrentTeacher(quiz, roomIds = []) {
+    return isAdminUser() || quiz.teacherId === currentUser.uid || quiz.ownerId === currentUser.uid || (quiz.roomId && roomIds.includes(quiz.roomId));
+}
+
+function renderTeacherQuizzes(listId, quizzes, rooms = []) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    if (!quizzes.length) return setListEmpty(listId, 'Nenhum quiz cadastrado.');
+    const roomsMap = Object.fromEntries(rooms.map(room => [room.id, room]));
+
+    list.innerHTML = quizzes.map(quiz => `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">${escapeHtml(quiz.title)}</h3>
+                <span class="card-badge ${quiz.status === 'active' ? '' : 'card-badge-secondary'}">${quiz.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+            </div>
+            <div class="card-content">
+                <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
+                <p><strong>Categoria:</strong> ${escapeHtml(quiz.category || 'Geral')}</p>
+                <p><strong>Sala:</strong> ${escapeHtml(roomsMap[quiz.roomId]?.name || 'Sem sala')}</p>
+                <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-primary teacher-quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-danger teacher-quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    addClickHandler(`#${listId} .teacher-quiz-edit`, event => openTeacherQuizModal(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .teacher-quiz-delete`, event => deleteQuiz(event.currentTarget.dataset.id, () => {
+        isAdminUser() ? loadAdminQuizzes() : loadTeacherQuizzes();
+    }));
+}
+
+function loadTeacherQuizzes() {
+    setListLoading('teacher-quizzes-list', 'Carregando quizzes...');
+    return Promise.all([getManagedRooms(), fetchCollection('quizzes')])
+        .then(([rooms, quizzes]) => {
+            const roomIds = rooms.map(room => room.id);
+            const visible = firebaseOrderByCreatedDesc(quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds)));
+            teacherQuizzesCache = visible;
+            renderTeacherQuizzes('teacher-quizzes-list', visible, rooms);
+        })
+        .catch(error => {
+            console.error('Erro ao carregar quizzes do professor:', error);
+            setListEmpty('teacher-quizzes-list', 'Erro ao carregar quizzes.');
+        });
+}
+
+function openTeacherUserModal(userId = null) {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+    editingTeacherUserId = userId;
+    setText('teacher-user-modal-title', userId ? 'Editar Aluno' : 'Cadastrar Aluno');
+    ['teacher-user-name', 'teacher-user-email', 'teacher-user-password'].forEach(id => setValue(id, ''));
+    setValue('teacher-user-status', 'active');
+
+    Promise.all([
+        getManagedRooms(),
+        userId ? db.collection('users').doc(userId).get() : Promise.resolve(null)
+    ]).then(([rooms, userDoc]) => {
+        let selectedRoomIds = [];
+        if (userDoc && userDoc.exists) {
+            const user = userDoc.data();
+            setValue('teacher-user-name', user.name || '');
+            setValue('teacher-user-email', user.email || '');
+            setValue('teacher-user-status', user.status || 'active');
+            selectedRoomIds = user.roomIds || [];
+        }
+
+        const roomList = document.getElementById('teacher-user-rooms-list');
+        roomList.innerHTML = rooms.length
+            ? rooms.map(room => `
+                <label class="checkbox-row" style="margin-bottom: 0.5rem;">
+                    <input type="checkbox" value="${escapeHtml(room.id)}" ${selectedRoomIds.includes(room.id) ? 'checked' : ''}>
+                    <span>${escapeHtml(room.name)}</span>
+                </label>
+            `).join('')
+            : '<p>Nenhuma sala cadastrada.</p>';
+
+        document.getElementById('teacher-user-modal').classList.remove('hidden');
+    }).catch(error => alert('Erro ao abrir aluno: ' + getAuthErrorMessage(error)));
+}
+
+function closeTeacherUserModal() {
+    document.getElementById('teacher-user-modal').classList.add('hidden');
+    editingTeacherUserId = null;
+}
+
+function selectedRoomIdsFromTeacherUserModal() {
+    return Array.from(document.querySelectorAll('#teacher-user-rooms-list input[type="checkbox"]:checked')).map(input => input.value);
+}
+
+function saveTeacherUser() {
+    if (!canManageTeacherResources()) return alert('Acesso negado.');
+    const name = getValue('teacher-user-name');
+    const email = getValue('teacher-user-email');
+    const password = getValue('teacher-user-password');
+    const status = getValue('teacher-user-status') || 'active';
+    const roomIds = selectedRoomIdsFromTeacherUserModal();
+
+    if (!name || !email) return alert('Preencha nome e e-mail.');
+
+    const finish = () => {
+        closeTeacherUserModal();
+        isAdminUser() ? loadAdminUsers() : loadTeacherUsers();
+    };
+
+    if (editingTeacherUserId) {
+        db.collection('users').doc(editingTeacherUserId).set({
+            name,
+            email,
+            userType: 'aluno',
+            status,
+            roomIds,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(() => {
+            alert('Aluno atualizado com sucesso!');
+            finish();
+        }).catch(error => alert('Erro ao atualizar aluno: ' + getAuthErrorMessage(error)));
+        return;
+    }
+
+    createManagedUser({ name, email, password, userType: 'aluno', status, roomIds })
+        .then(() => {
+            alert('Aluno criado com sucesso!');
+            finish();
+        })
+        .catch(error => alert('Erro ao criar aluno: ' + getAuthErrorMessage(error)));
+}
+
+function loadTeacherUsers() {
+    setListLoading('teacher-users-list', 'Carregando alunos...');
+    return Promise.all([getManagedRooms(), fetchUsersByType('aluno')])
+        .then(([rooms, students]) => {
+            const roomIds = rooms.map(room => room.id);
+            const visible = isAdminUser()
+                ? students
+                : students.filter(student => (student.roomIds || []).some(roomId => roomIds.includes(roomId)));
+            teacherUsersCache = visible;
+            renderUsers('teacher-users-list', visible, { teacherMode: true });
+        })
+        .catch(error => {
+            console.error('Erro ao carregar alunos:', error);
+            setListEmpty('teacher-users-list', 'Erro ao carregar alunos.');
+        });
+}
+
+function renderUsers(listId, users, options = {}) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+    if (!users.length) return setListEmpty(listId, 'Nenhum usuario encontrado.');
+
+    list.innerHTML = users.map(user => `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">${escapeHtml(user.name || 'Sem nome')}</h3>
+                <span class="card-badge ${user.status === 'inactive' ? 'card-badge-secondary' : ''}">${user.status === 'inactive' ? 'Inativo' : 'Ativo'}</span>
+            </div>
+            <div class="card-content">
+                <p><strong>E-mail:</strong> ${escapeHtml(user.email || 'N/A')}</p>
+                <p><strong>Tipo:</strong> ${escapeHtml(user.userType || 'aluno')}</p>
+                <p><strong>Salas:</strong> ${(user.roomIds || []).length}</p>
+                <p><strong>Criado em:</strong> ${formatDate(user.createdAt)}</p>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-primary user-edit" data-id="${escapeHtml(user.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-secondary user-toggle" data-id="${escapeHtml(user.id)}" data-status="${escapeHtml(user.status || 'active')}"><i class="fas fa-power-off"></i><span class="btn-text">${user.status === 'inactive' ? 'Ativar' : 'Desativar'}</span></button>
+                <button class="btn btn-danger user-delete" data-id="${escapeHtml(user.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    addClickHandler(`#${listId} .user-edit`, event => options.teacherMode ? openTeacherUserModal(event.currentTarget.dataset.id) : openUserModal(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .user-toggle`, event => toggleUserStatus(event.currentTarget.dataset.id, event.currentTarget.dataset.status === 'inactive' ? 'active' : 'inactive'));
+    addClickHandler(`#${listId} .user-delete`, event => deleteUser(event.currentTarget.dataset.id));
+}
+
+function loadAdminUsers() {
+    setListLoading('admin-users-list', 'Carregando usuarios...');
+    return fetchCollection('users')
+        .then(users => {
+            adminUsersCache = users.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
+            filterAdminUsers(document.getElementById('admin-users-search')?.value || '');
+        })
+        .catch(error => {
+            console.error('Erro ao carregar usuarios:', error);
+            setListEmpty('admin-users-list', 'Erro ao carregar usuarios.');
+        });
+}
+
+function filterAdminUsers(query) {
+    const term = (query || '').trim().toLowerCase();
+    const users = term
+        ? adminUsersCache.filter(user => `${user.name || ''} ${user.email || ''} ${user.userType || ''}`.toLowerCase().includes(term))
+        : adminUsersCache;
+    renderUsers('admin-users-list', users);
+}
+
+function openUserModal(userId = null) {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuarios.');
+    editingUserId = userId;
+    setText('user-modal-title', userId ? 'Editar Usuario' : 'Criar Usuario');
+    ['user-name', 'user-email', 'user-password'].forEach(id => setValue(id, ''));
+    setValue('user-type', 'aluno');
+    setValue('user-status', 'active');
+
+    if (!userId) {
+        document.getElementById('user-modal').classList.remove('hidden');
+        return;
+    }
+
+    db.collection('users').doc(userId).get().then(doc => {
+        if (!doc.exists) throw new Error('Usuario nao encontrado.');
+        const user = doc.data();
+        setValue('user-name', user.name || '');
+        setValue('user-email', user.email || '');
+        setValue('user-type', user.userType || 'aluno');
+        setValue('user-status', user.status || 'active');
+        document.getElementById('user-modal').classList.remove('hidden');
+    }).catch(error => alert('Erro ao abrir usuario: ' + getAuthErrorMessage(error)));
+}
+
+function closeUserModal() {
+    document.getElementById('user-modal').classList.add('hidden');
+    editingUserId = null;
+}
+
+function saveUser() {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuarios.');
+    const name = getValue('user-name');
+    const email = getValue('user-email');
+    const password = getValue('user-password');
+    const userType = getValue('user-type') || 'aluno';
+    const status = getValue('user-status') || 'active';
+
+    if (!name || !email) return alert('Preencha nome e e-mail.');
+
+    if (editingUserId) {
+        db.collection('users').doc(editingUserId).set({
+            name,
+            email,
+            userType,
+            status,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        }, { merge: true }).then(() => {
+            alert('Usuario atualizado com sucesso!');
+            closeUserModal();
+            loadAdminUsers();
+        }).catch(error => alert('Erro ao atualizar usuario: ' + getAuthErrorMessage(error)));
+        return;
+    }
+
+    createManagedUser({ name, email, password, userType, status })
+        .then(() => {
+            alert('Usuario criado com sucesso!');
+            closeUserModal();
+            loadAdminUsers();
+        })
+        .catch(error => alert('Erro ao criar usuario: ' + getAuthErrorMessage(error)));
+}
+
+function toggleUserStatus(userId, status) {
+    db.collection('users').doc(userId).set({
+        status,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => {
+        loadAdminUsers();
+        if (isTeacherUser()) loadTeacherUsers();
+    }).catch(error => alert('Erro ao alterar status: ' + getAuthErrorMessage(error)));
+}
+
+function deleteUser(userId) {
+    if (!confirm('Tem certeza que deseja excluir este usuario do Firestore?')) return;
+    db.collection('users').doc(userId).delete()
+        .then(() => {
+            alert('Usuario excluido com sucesso!');
+            isAdminUser() ? loadAdminUsers() : loadTeacherUsers();
+        })
+        .catch(error => alert('Erro ao excluir usuario: ' + getAuthErrorMessage(error)));
+}
+
+function openQuizModal(quizId = null) {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar quizzes globais.');
+    editingQuizId = quizId;
+    setText('quiz-modal-title', quizId ? 'Editar Quiz' : 'Criar Novo Quiz');
+    selectedStudents = [];
+    ['quiz-title', 'quiz-description', 'quiz-questions-count', 'quiz-time'].forEach(id => setValue(id, ''));
+    setValue('quiz-status', 'active');
+    setValue('quiz-visibility', 'all');
+    setChecked('allow-review', true);
+    document.getElementById('specific-students-container').classList.add('hidden');
+    updateSelectedStudentsDisplay();
+
+    populateCategorySelect('quiz-category').then(() => {
+        if (!quizId) return null;
+        return db.collection('quizzes').doc(quizId).get().then(doc => {
+            if (!doc.exists) throw new Error('Quiz nao encontrado.');
+            const quiz = doc.data();
+            setValue('quiz-title', quiz.title);
+            setValue('quiz-description', quiz.description || '');
+            setValue('quiz-category', quiz.category || '');
+            setValue('quiz-questions-count', quiz.questionsCount || '');
+            setValue('quiz-time', quiz.time || '');
+            setValue('quiz-status', quiz.status || 'active');
+            setValue('quiz-visibility', quiz.visibility || 'all');
+            setChecked('allow-review', quiz.allowReview !== false);
+            if (quiz.visibility === 'specific') {
+                document.getElementById('specific-students-container').classList.remove('hidden');
+                selectedStudents = [];
+                loadAvailableStudents('available-students-list', quiz.allowedStudents || []).then(students => {
+                    selectedStudents = students
+                        .filter(student => (quiz.allowedStudents || []).includes(student.id))
+                        .map(student => ({ id: student.id, name: student.name || student.email }));
+                    updateSelectedStudentsDisplay();
+                });
+            }
+        });
+    }).then(() => document.getElementById('quiz-modal').classList.remove('hidden'))
+      .catch(error => alert('Erro ao abrir quiz: ' + getAuthErrorMessage(error)));
+}
+
+function closeQuizModal() {
+    document.getElementById('quiz-modal').classList.add('hidden');
+    editingQuizId = null;
+    selectedStudents = [];
+}
+
+function saveQuiz() {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar quizzes globais.');
+    const visibility = getValue('quiz-visibility') || 'all';
+    const selectedIds = visibility === 'specific' ? selectedStudentIdsFrom('available-students-list') : [];
+    const quizData = {
+        title: getValue('quiz-title'),
+        description: getValue('quiz-description'),
+        category: getValue('quiz-category'),
+        questionsCount: Number(getValue('quiz-questions-count')),
+        time: Number(getValue('quiz-time')),
+        status: getValue('quiz-status') || 'active',
+        visibility,
+        allowedStudents: selectedIds,
+        allowReview: document.getElementById('allow-review').checked,
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        ownerType: 'admin',
+        ownerId: currentUser.uid
+    };
+
+    if (!quizData.title || !quizData.category || !quizData.questionsCount || !quizData.time) {
+        return alert('Preencha titulo, categoria, numero de questoes e tempo.');
+    }
+    if (visibility === 'specific' && selectedIds.length === 0) {
+        return alert('Selecione pelo menos um aluno.');
+    }
+
+    const request = editingQuizId
+        ? db.collection('quizzes').doc(editingQuizId).set(quizData, { merge: true })
+        : db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+    request.then(() => {
+        alert('Quiz salvo com sucesso!');
+        closeQuizModal();
+        loadAdminQuizzes();
+    }).catch(error => alert('Erro ao salvar quiz: ' + getAuthErrorMessage(error)));
+}
+
+function renderAdminQuizzes(quizzes) {
+    const list = document.getElementById('admin-quizzes-list');
+    if (!list) return;
+    if (!quizzes.length) return setListEmpty('admin-quizzes-list', 'Nenhum quiz cadastrado.');
+
+    list.innerHTML = quizzes.map(quiz => `
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">${escapeHtml(quiz.title || 'Sem titulo')}</h3>
+                <span class="card-badge ${quiz.status === 'active' ? '' : 'card-badge-secondary'}">${quiz.status === 'active' ? 'Ativo' : 'Inativo'}</span>
+            </div>
+            <div class="card-content">
+                <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
+                <p><strong>Categoria:</strong> ${escapeHtml(quiz.category || 'Geral')}</p>
+                <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
+                <p><strong>Visibilidade:</strong> ${escapeHtml(quiz.visibility || 'all')}</p>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-primary quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-danger quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    addClickHandler('#admin-quizzes-list .quiz-edit', event => {
+        const quiz = quizzes.find(item => item.id === event.currentTarget.dataset.id);
+        if (quiz && quiz.roomId) openTeacherQuizModal(quiz.id);
+        else openQuizModal(event.currentTarget.dataset.id);
+    });
+    addClickHandler('#admin-quizzes-list .quiz-delete', event => deleteQuiz(event.currentTarget.dataset.id, loadAdminQuizzes));
+}
+
+function loadAdminQuizzes() {
+    setListLoading('admin-quizzes-list', 'Carregando quizzes...');
+    return fetchCollection('quizzes')
+        .then(quizzes => renderAdminQuizzes(firebaseOrderByCreatedDesc(quizzes)))
+        .catch(error => {
+            console.error('Erro ao carregar quizzes:', error);
+            setListEmpty('admin-quizzes-list', 'Erro ao carregar quizzes.');
+        });
+}
+
+function deleteQuiz(quizId, onDone = loadAdminQuizzes) {
+    if (!confirm('Tem certeza que deseja excluir este quiz?')) return;
+    db.collection('quizzes').doc(quizId).delete()
+        .then(() => {
+            alert('Quiz excluido com sucesso!');
+            onDone();
+        })
+        .catch(error => alert('Erro ao excluir quiz: ' + getAuthErrorMessage(error)));
+}
+
+function openQuestionModal(questionId = null) {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar questoes.');
+    editingQuestionId = questionId;
+    setText('question-modal-title', questionId ? 'Editar Questao' : 'Adicionar Nova Questao');
+    ['question-text', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
+    setValue('correct-answer', 'a');
+
+    if (!questionId) {
+        document.getElementById('question-modal').classList.remove('hidden');
+        return;
+    }
+
+    db.collection('questions').doc(questionId).get().then(doc => {
+        if (!doc.exists) throw new Error('Questao nao encontrada.');
+        const question = doc.data();
+        setValue('question-text', question.text || '');
+        setValue('question-category', question.category || '');
+        setValue('option-a', question.options?.a || '');
+        setValue('option-b', question.options?.b || '');
+        setValue('option-c', question.options?.c || '');
+        setValue('option-d', question.options?.d || '');
+        setValue('correct-answer', question.correctAnswer || 'a');
+        document.getElementById('question-modal').classList.remove('hidden');
+    }).catch(error => alert('Erro ao abrir questao: ' + getAuthErrorMessage(error)));
+}
+
+function closeQuestionModal() {
+    document.getElementById('question-modal').classList.add('hidden');
+    editingQuestionId = null;
+}
+
+function saveQuestion() {
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar questoes.');
+    const data = {
+        text: getValue('question-text'),
+        category: getValue('question-category') || 'Geral',
+        options: {
+            a: getValue('option-a'),
+            b: getValue('option-b'),
+            c: getValue('option-c'),
+            d: getValue('option-d')
+        },
+        correctAnswer: getValue('correct-answer') || 'a',
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (!data.text || !data.options.a || !data.options.b || !data.options.c || !data.options.d) {
+        return alert('Preencha o enunciado e todas as alternativas.');
+    }
+
+    const request = editingQuestionId
+        ? db.collection('questions').doc(editingQuestionId).set(data, { merge: true })
+        : db.collection('questions').add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+
+    request.then(() => {
+        alert('Questao salva com sucesso!');
+        closeQuestionModal();
+        loadAdminQuestions();
+    }).catch(error => alert('Erro ao salvar questao: ' + getAuthErrorMessage(error)));
+}
+
+function renderQuestions(questions) {
+    const list = document.getElementById('admin-questions-list');
+    if (!list) return;
+    if (!questions.length) return setListEmpty('admin-questions-list', 'Nenhuma questao cadastrada.');
+
+    list.innerHTML = questions.map(question => `
+        <div class="card question-card">
+            <div class="card-header">
+                <h3 class="card-title">${escapeHtml((question.text || '').slice(0, 90))}</h3>
+                <span class="card-badge">${escapeHtml(question.category || 'Geral')}</span>
+            </div>
+            <div class="card-content">
+                <p><strong>A:</strong> ${escapeHtml(question.options?.a || '')}</p>
+                <p><strong>B:</strong> ${escapeHtml(question.options?.b || '')}</p>
+                <p><strong>C:</strong> ${escapeHtml(question.options?.c || '')}</p>
+                <p><strong>D:</strong> ${escapeHtml(question.options?.d || '')}</p>
+                <p><strong>Resposta:</strong> ${(question.correctAnswer || '').toUpperCase()}</p>
+            </div>
+            <div class="card-actions">
+                <button class="btn btn-primary question-edit" data-id="${escapeHtml(question.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-danger question-delete" data-id="${escapeHtml(question.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+            </div>
+        </div>
+    `).join('');
+
+    addClickHandler('#admin-questions-list .question-edit', event => openQuestionModal(event.currentTarget.dataset.id));
+    addClickHandler('#admin-questions-list .question-delete', event => deleteQuestion(event.currentTarget.dataset.id));
+}
+
+function loadAdminQuestions() {
+    setListLoading('admin-questions-list', 'Carregando questoes...');
+    return fetchCollection('questions')
+        .then(questions => renderQuestions(firebaseOrderByCreatedDesc(questions)))
+        .catch(error => {
+            console.error('Erro ao carregar questoes:', error);
+            setListEmpty('admin-questions-list', 'Erro ao carregar questoes.');
+        });
+}
+
+function deleteQuestion(questionId) {
+    if (!confirm('Tem certeza que deseja excluir esta questao?')) return;
+    db.collection('questions').doc(questionId).delete()
+        .then(() => {
+            alert('Questao excluida com sucesso!');
+            loadAdminQuestions();
+        })
+        .catch(error => alert('Erro ao excluir questao: ' + getAuthErrorMessage(error)));
+}
+
+function openImportModal() {
+    document.getElementById('import-modal').classList.remove('hidden');
+}
+
+function closeImportModal() {
+    document.getElementById('import-modal').classList.add('hidden');
+}
+
+function importQuestions() {
+    let questions;
+    try {
+        questions = JSON.parse(document.getElementById('json-data').value);
+    } catch (error) {
+        return alert('JSON invalido.');
+    }
+    if (!Array.isArray(questions) || questions.length === 0) return alert('Informe um array de questoes.');
+
+    const batch = db.batch();
+    questions.forEach(question => {
+        const ref = db.collection('questions').doc();
+        batch.set(ref, {
+            text: question.text || '',
+            category: question.category || 'Geral',
+            options: question.options || {},
+            correctAnswer: question.correctAnswer || 'a',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+    });
+
+    batch.commit().then(() => {
+        alert('Questoes importadas com sucesso!');
+        closeImportModal();
+        loadAdminQuestions();
+    }).catch(error => alert('Erro ao importar questoes: ' + getAuthErrorMessage(error)));
+}
+
+function loadQuizzes() {
+    const list = setListLoading('quizzes-list', 'Carregando quizzes...');
+    if (!list) return Promise.resolve();
+    return Promise.all([fetchCollection('quizzes'), fetchCollection('rooms')])
+        .then(([quizzes, rooms]) => {
+            const activeRooms = rooms.filter(room => (room.studentIds || []).includes(currentUser.uid));
+            const roomIds = activeRooms.map(room => room.id);
+            const visible = quizzes.filter(quiz => {
+                if (quiz.status !== 'active') return false;
+                if (quiz.visibility === 'specific') return (quiz.allowedStudents || []).includes(currentUser.uid);
+                if (quiz.visibility === 'room') return quiz.roomId && roomIds.includes(quiz.roomId);
+                return !quiz.visibility || quiz.visibility === 'all';
+            });
+
+            if (!visible.length) return setListEmpty('quizzes-list', 'Nenhum quiz disponivel.');
+            list.innerHTML = firebaseOrderByCreatedDesc(visible).map(quiz => `
+                <div class="card">
+                    <div class="card-header"><h3 class="card-title">${escapeHtml(quiz.title)}</h3><span class="card-badge">${escapeHtml(quiz.category || 'Geral')}</span></div>
+                    <div class="card-content">
+                        <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
+                        <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                        <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
+                    </div>
+                    <div class="card-actions">
+                        <button class="btn btn-primary quiz-start" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-play"></i><span class="btn-text">Iniciar</span></button>
+                    </div>
+                </div>
+            `).join('');
+            addClickHandler('#quizzes-list .quiz-start', event => alert('Fluxo de realizacao do quiz ainda precisa ser reconectado a partir do backup completo.'));
+        })
+        .catch(error => {
+            console.error('Erro ao carregar quizzes:', error);
+            setListEmpty('quizzes-list', 'Erro ao carregar quizzes.');
+        });
+}
+
+function loadRanking() {
+    return loadGenericRanking('ranking-list');
+}
+
+function loadAdminRanking() {
+    return loadGenericRanking('admin-ranking-list');
+}
+
+function loadTeacherRanking() {
+    return loadGenericRanking('teacher-ranking-list');
+}
+
+function loadGenericRanking(listId) {
+    const list = setListLoading(listId, 'Carregando ranking...');
+    if (!list) return Promise.resolve();
+    return Promise.all([fetchCollection('userQuizzes'), fetchCollection('users')])
+        .then(([results, users]) => {
+            const usersMap = Object.fromEntries(users.map(user => [user.id, user]));
+            const scores = {};
+            results.filter(result => result.status === 'completed').forEach(result => {
+                const userId = result.userId;
+                if (!scores[userId]) scores[userId] = { userId, totalScore: 0, totalQuizzes: 0 };
+                scores[userId].totalScore += Number(result.score || 0);
+                scores[userId].totalQuizzes += 1;
+            });
+            const ranking = Object.values(scores).sort((a, b) => b.totalScore - a.totalScore);
+            if (!ranking.length) return setListEmpty(listId, 'Nenhum resultado encontrado.');
+            list.innerHTML = ranking.map((item, index) => `
+                <div class="ranking-item">
+                    <div class="ranking-position">${index + 1}</div>
+                    <div class="ranking-info">
+                        <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuario')}</div>
+                        <div class="ranking-details">${item.totalQuizzes} quiz(es)</div>
+                    </div>
+                    <div class="ranking-score">${item.totalScore} pts</div>
+                </div>
+            `).join('');
+        })
+        .catch(error => {
+            console.error('Erro ao carregar ranking:', error);
+            setListEmpty(listId, 'Erro ao carregar ranking.');
+        });
+}
+
+function loadQuizRankings() {
+    setListEmpty('quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+}
+
+function loadAdminQuizRankings() {
+    setListEmpty('admin-quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+}
+
+function loadTeacherQuizRankings() {
+    setListEmpty('teacher-quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+}
+
+function loadUserHistory() {
+    setListEmpty('history-list', 'Historico indisponivel nesta versao.');
+}
+
+function loadAdminReports() {
+    return loadReports('admin-reports-content');
+}
+
+function loadTeacherReports() {
+    return loadReports('teacher-reports-content');
+}
+
+function loadReports(containerId) {
+    const container = setListLoading(containerId, 'Carregando relatorios...');
+    if (!container) return Promise.resolve();
+    return Promise.all([fetchCollection('users'), fetchCollection('rooms'), fetchCollection('quizzes'), fetchCollection('questions')])
+        .then(([users, rooms, quizzes, questions]) => {
+            container.innerHTML = `
+                <div class="card"><div class="card-content"><h3>${users.length}</h3><p>Usuarios</p></div></div>
+                <div class="card"><div class="card-content"><h3>${rooms.length}</h3><p>Salas</p></div></div>
+                <div class="card"><div class="card-content"><h3>${quizzes.length}</h3><p>Quizzes</p></div></div>
+                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questoes</p></div></div>
+            `;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar relatorios:', error);
+            setListEmpty(containerId, 'Erro ao carregar relatorios.');
+        });
+}
+
+window.openRoomModal = openRoomModal;
+window.closeRoomModal = closeRoomModal;
+window.saveRoom = saveRoom;
+window.loadTeacherRooms = loadTeacherRooms;
+window.loadAdminRooms = loadAdminRooms;
+window.openTeacherQuizModal = openTeacherQuizModal;
+window.closeTeacherQuizModal = closeTeacherQuizModal;
+window.saveTeacherQuiz = saveTeacherQuiz;
+window.loadTeacherQuizzes = loadTeacherQuizzes;
+window.openTeacherUserModal = openTeacherUserModal;
+window.closeTeacherUserModal = closeTeacherUserModal;
+window.saveTeacherUser = saveTeacherUser;
+window.loadTeacherUsers = loadTeacherUsers;
+window.loadAdminUsers = loadAdminUsers;
+window.openUserModal = openUserModal;
+window.closeUserModal = closeUserModal;
+window.saveUser = saveUser;
+window.loadAdminQuizzes = loadAdminQuizzes;
+window.openQuizModal = openQuizModal;
+window.closeQuizModal = closeQuizModal;
+window.saveQuiz = saveQuiz;
+window.loadAdminQuestions = loadAdminQuestions;
+window.openQuestionModal = openQuestionModal;
+window.closeQuestionModal = closeQuestionModal;
+window.saveQuestion = saveQuestion;
+window.openImportModal = openImportModal;
+window.closeImportModal = closeImportModal;
+window.importQuestions = importQuestions;
+window.loadQuizzes = loadQuizzes;
+window.loadRanking = loadRanking;
+window.loadAdminRanking = loadAdminRanking;
+window.loadTeacherRanking = loadTeacherRanking;
+window.loadQuizRankings = loadQuizRankings;
+window.loadAdminQuizRankings = loadAdminQuizRankings;
+window.loadTeacherQuizRankings = loadTeacherQuizRankings;
+window.loadUserHistory = loadUserHistory;
+window.loadAdminReports = loadAdminReports;
+window.loadTeacherReports = loadTeacherReports;
