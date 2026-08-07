@@ -67,7 +67,7 @@ service cloud.firestore {
         (isProfessor() && isStudentUserData(resource.data) && isStudentUserData(request.resource.data))
       );
 
-      allow delete: if isAdmin() || (isProfessor() && isStudentUserData(resource.data));
+      allow delete: if isAdmin();
     }
 
     match /rooms/{roomId} {

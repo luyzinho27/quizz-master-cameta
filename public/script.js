@@ -80,6 +80,7 @@ let adminUsersCache = [];
 let teacherStudentsCache = [];
 let teacherQuizzesCache = [];
 let teacherUsersCache = [];
+let editingTeacherTargetUserType = 'aluno';
 
 // Elementos da DOM
 const authContainer = document.getElementById('auth-container');
@@ -1844,7 +1845,8 @@ function loadTeacherQuizzes() {
 function openTeacherUserModal(userId = null) {
     if (!canManageTeacherResources()) return alert('Acesso negado.');
     editingTeacherUserId = userId;
-    setText('teacher-user-modal-title', userId ? 'Editar Aluno' : 'Cadastrar Aluno');
+    editingTeacherTargetUserType = 'aluno';
+    setText('teacher-user-modal-title', userId ? 'Editar Usuario' : 'Cadastrar Aluno');
     ['teacher-user-name', 'teacher-user-email', 'teacher-user-password'].forEach(id => setValue(id, ''));
     setValue('teacher-user-status', 'active');
 
@@ -1855,6 +1857,13 @@ function openTeacherUserModal(userId = null) {
         let selectedRoomIds = [];
         if (userDoc && userDoc.exists) {
             const user = userDoc.data();
+            if (isTeacherUser() && userId !== currentUser.uid && user.userType !== 'aluno') {
+                throw new Error('Acesso negado a este usuario.');
+            }
+
+            editingTeacherTargetUserType = user.userType || 'aluno';
+            const isOwnProfile = isTeacherUser() && userId === currentUser.uid;
+            setText('teacher-user-modal-title', isOwnProfile ? 'Editar Meu Cadastro' : 'Editar Aluno');
             setValue('teacher-user-name', user.name || '');
             setValue('teacher-user-email', user.email || '');
             setValue('teacher-user-status', user.status || 'active');
@@ -1862,7 +1871,10 @@ function openTeacherUserModal(userId = null) {
         }
 
         const roomList = document.getElementById('teacher-user-rooms-list');
-        roomList.innerHTML = rooms.length
+        const isOwnProfile = isTeacherUser() && userId === currentUser.uid;
+        roomList.innerHTML = isOwnProfile
+            ? '<p>Seu usuario de professor nao e vinculado a salas como aluno.</p>'
+            : rooms.length
             ? rooms.map(room => `
                 <label class="checkbox-row" style="margin-bottom: 0.5rem;">
                     <input type="checkbox" value="${escapeHtml(room.id)}" ${selectedRoomIds.includes(room.id) ? 'checked' : ''}>
@@ -1878,6 +1890,7 @@ function openTeacherUserModal(userId = null) {
 function closeTeacherUserModal() {
     document.getElementById('teacher-user-modal').classList.add('hidden');
     editingTeacherUserId = null;
+    editingTeacherTargetUserType = 'aluno';
 }
 
 function selectedRoomIdsFromTeacherUserModal() {
@@ -1891,6 +1904,7 @@ function saveTeacherUser() {
     const password = getValue('teacher-user-password');
     const status = getValue('teacher-user-status') || 'active';
     const roomIds = selectedRoomIdsFromTeacherUserModal();
+    const isOwnProfile = isTeacherUser() && editingTeacherUserId === currentUser.uid;
 
     if (!name || !email) return alert('Preencha nome e e-mail.');
 
@@ -1900,17 +1914,26 @@ function saveTeacherUser() {
     };
 
     if (editingTeacherUserId) {
-        db.collection('users').doc(editingTeacherUserId).set({
+        const userData = {
             name,
             email,
-            userType: 'aluno',
+            userType: isOwnProfile ? editingTeacherTargetUserType : 'aluno',
             status,
-            roomIds,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        }, { merge: true }).then(() => {
-            alert('Aluno atualizado com sucesso!');
+        };
+
+        if (!isOwnProfile) {
+            userData.roomIds = roomIds;
+        }
+
+        db.collection('users').doc(editingTeacherUserId).set(userData, { merge: true }).then(() => {
+            if (isOwnProfile) {
+                currentUser = { ...currentUser, name, email, status };
+                setText('teacher-name', name || email);
+            }
+            alert(isOwnProfile ? 'Cadastro atualizado com sucesso!' : 'Aluno atualizado com sucesso!');
             finish();
-        }).catch(error => alert('Erro ao atualizar aluno: ' + getAuthErrorMessage(error)));
+        }).catch(error => alert('Erro ao atualizar usuario: ' + getAuthErrorMessage(error)));
         return;
     }
 
@@ -1924,14 +1947,24 @@ function saveTeacherUser() {
 
 function loadTeacherUsers() {
     setListLoading('teacher-users-list', 'Carregando alunos...');
-    return Promise.all([getManagedRooms(), fetchUsersByType('aluno')])
-        .then(([rooms, students]) => {
-            const roomIds = rooms.map(room => room.id);
-            const visible = isAdminUser()
-                ? students
-                : students.filter(student => (student.roomIds || []).some(roomId => roomIds.includes(roomId)));
-            teacherUsersCache = visible;
-            renderUsers('teacher-users-list', visible, { teacherMode: true });
+    const usersRequest = isAdminUser()
+        ? fetchCollection('users')
+        : Promise.all([
+            fetchUsersByType('aluno'),
+            currentUser ? db.collection('users').doc(currentUser.uid).get() : Promise.resolve(null)
+        ]).then(([students, ownDoc]) => {
+            const ownUser = ownDoc && ownDoc.exists ? { id: ownDoc.id, ...ownDoc.data() } : null;
+            return uniqueById([ownUser, ...students].filter(Boolean));
+        });
+
+    return usersRequest
+        .then(users => {
+            teacherUsersCache = users.sort((a, b) => {
+                if (a.id === currentUser.uid) return -1;
+                if (b.id === currentUser.uid) return 1;
+                return (a.name || '').localeCompare(b.name || '', 'pt-BR');
+            });
+            renderUsers('teacher-users-list', teacherUsersCache, { teacherMode: true, allowDelete: false });
         })
         .catch(error => {
             console.error('Erro ao carregar alunos:', error);
@@ -1943,6 +1976,7 @@ function renderUsers(listId, users, options = {}) {
     const list = document.getElementById(listId);
     if (!list) return;
     if (!users.length) return setListEmpty(listId, 'Nenhum usuario encontrado.');
+    const allowDelete = options.allowDelete !== false;
 
     list.innerHTML = users.map(user => `
         <div class="card">
@@ -1959,14 +1993,16 @@ function renderUsers(listId, users, options = {}) {
             <div class="card-actions">
                 <button class="btn btn-primary user-edit" data-id="${escapeHtml(user.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
                 <button class="btn btn-secondary user-toggle" data-id="${escapeHtml(user.id)}" data-status="${escapeHtml(user.status || 'active')}"><i class="fas fa-power-off"></i><span class="btn-text">${user.status === 'inactive' ? 'Ativar' : 'Desativar'}</span></button>
-                <button class="btn btn-danger user-delete" data-id="${escapeHtml(user.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+                ${allowDelete ? `<button class="btn btn-danger user-delete" data-id="${escapeHtml(user.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
             </div>
         </div>
     `).join('');
 
     addClickHandler(`#${listId} .user-edit`, event => options.teacherMode ? openTeacherUserModal(event.currentTarget.dataset.id) : openUserModal(event.currentTarget.dataset.id));
     addClickHandler(`#${listId} .user-toggle`, event => toggleUserStatus(event.currentTarget.dataset.id, event.currentTarget.dataset.status === 'inactive' ? 'active' : 'inactive'));
-    addClickHandler(`#${listId} .user-delete`, event => deleteUser(event.currentTarget.dataset.id));
+    if (allowDelete) {
+        addClickHandler(`#${listId} .user-delete`, event => deleteUser(event.currentTarget.dataset.id));
+    }
 }
 
 function loadAdminUsers() {
@@ -2058,12 +2094,13 @@ function toggleUserStatus(userId, status) {
         status,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }, { merge: true }).then(() => {
-        loadAdminUsers();
+        if (isAdminUser()) loadAdminUsers();
         if (isTeacherUser()) loadTeacherUsers();
     }).catch(error => alert('Erro ao alterar status: ' + getAuthErrorMessage(error)));
 }
 
 function deleteUser(userId) {
+    if (!isAdminUser()) return alert('Apenas administradores podem excluir usuarios.');
     if (!confirm('Tem certeza que deseja excluir este usuario do Firestore?')) return;
     db.collection('users').doc(userId).delete()
         .then(() => {
