@@ -214,39 +214,91 @@
                 <div class="about-container">
                     <div class="about-header">
                         <h1>Sobre o QuizMaster</h1>
-                        <p>Uma plataforma educacional inovadora para testar e expandir seus conhecimentos</p>
+                        <p>Uma plataforma educacional para testar conhecimentos, acompanhar desempenho e participar de rankings.</p>
+                        <p>Como aluno, voc? acessa quizzes dispon?veis, rankings, hist?rico e informa??es da aplica??o.</p>
                     </div>
 
                     <div class="about-content">
                         <div class="about-section-content">
-                            <h2><i class="fas fa-rocket"></i> Sobre a Aplicação</h2>
+                            <h2><i class="fas fa-rocket"></i> Sobre a Aplica??o</h2>
                             <p>
-                                O <strong>QuizMaster</strong> é uma plataforma web desenvolvida para proporcionar uma experiência 
-                                educacional interativa e envolvente através de quizzes dinâmicos. Nossa missão é transformar 
-                                o aprendizado em uma jornada divertida e desafiadora, permitindo que estudantes testem seus 
-                                conhecimentos, acompanhem seu progresso e compitam de forma saudável com colegas.
+                                O <strong>QuizMaster</strong> ? uma plataforma web educacional para organizar quizzes, salas, alunos,
+                                rankings e relat?rios em um ambiente ?nico. A aplica??o trabalha com perfis de Aluno, Professor e
+                                Administrador, usando autentica??o pelo Firebase, regras de seguran?a no Firestore e pain?is espec?ficos
+                                para cada tipo de usu?rio.
                             </p>
-                            
+
                             <div class="features-grid">
                                 <div class="feature-card">
-                                    <i class="fas fa-brain"></i>
-                                    <h3>Quizzes Dinâmicos</h3>
-                                    <p>Questões aleatórias selecionadas de um banco de dados diversificado</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-trophy"></i>
-                                    <h3>Sistema de Ranking</h3>
-                                    <p>Classificação em tempo real baseada no desempenho dos usuários</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-chart-line"></i>
-                                    <h3>Análise de Desempenho</h3>
-                                    <p>Relatórios detalhados e histórico completo de tentativas</p>
+                                    <i class="fas fa-user-lock"></i>
+                                    <h3>Autentica??o</h3>
+                                    <p>Login com e-mail e senha, login com Google, sess?o persistente e controle por tipo de usu?rio.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-users-cog"></i>
-                                    <h3>Painel Administrativo</h3>
-                                    <p>Ferramentas completas para gerenciar quizzes, questões e usuários</p>
+                                    <h3>Perfis de Acesso</h3>
+                                    <p>Aluno, Professor e Administrador possuem dashboards, permiss?es e menus adequados ao seu papel.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-door-open"></i>
+                                    <h3>Salas</h3>
+                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Alunos</h3>
+                                    <p>Professores visualizam usu?rios do tipo Aluno, cadastram novos alunos e editam dados e status.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-list-alt"></i>
+                                    <h3>Quizzes</h3>
+                                    <p>Administradores gerenciam quizzes globais; professores e admins tamb?m criam quizzes por sala.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-question-circle"></i>
+                                    <h3>Quest?es</h3>
+                                    <p>Banco de quest?es categorizadas com cadastro, edi??o, exclus?o e importa??o por JSON.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-trophy"></i>
+                                    <h3>Rankings</h3>
+                                    <p>?reas de ranking geral e ranking por quiz para acompanhar desempenho dos alunos.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chart-pie"></i>
+                                    <h3>Relat?rios</h3>
+                                    <p>Resumo de usu?rios, salas, quizzes e quest?es para acompanhamento administrativo e pedag?gico.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-cog"></i>
+                                    <h3>Perfil</h3>
+                                    <p>Professor e Administrador editam o pr?prio cadastro pelo menu Perfil no cabe?alho.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <h3>Seguran?a</h3>
+                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="about-section-content">
+                            <h2><i class="fas fa-users"></i> Funcionalidades por Perfil</h2>
+                            <div class="features-grid">
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Aluno</h3>
+                                    <p>Acessa quizzes dispon?veis, rankings, hist?rico e informa??es gerais da plataforma.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chalkboard-teacher"></i>
+                                    <h3>Professor</h3>
+                                    <p>Gerencia salas, quizzes por sala, alunos, relat?rios e seu pr?prio perfil, sem excluir usu?rios.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-shield"></i>
+                                    <h3>Administrador</h3>
+                                    <p>Gerencia usu?rios, salas, quizzes, quest?es, importa??es, rankings, relat?rios e novos admins.</p>
                                 </div>
                             </div>
                         </div>
@@ -268,11 +320,23 @@
                                 </div>
                                 <div class="tech-item">
                                     <i class="fas fa-database"></i>
-                                    <span>Firebase</span>
+                                    <span>Cloud Firestore</span>
                                 </div>
                                 <div class="tech-item">
                                     <i class="fab fa-google"></i>
-                                    <span>Firestore</span>
+                                    <span>Firebase Auth</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <span>Firestore Rules</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-cloud"></i>
+                                    <span>Firebase Hosting</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-icons"></i>
+                                    <span>Font Awesome</span>
                                 </div>
                             </div>
                         </div>
@@ -282,18 +346,17 @@
                             <div class="developer-info">
                                 <div class="developer-card">
                                     <div class="developer-avatar">
-                                        <img src="images/foto-perfil.jpg" alt="Luiz Sérgio Garcia Carvalho" class="avatar-image">
+                                        <img src="images/foto-perfil.jpg" alt="Luiz S?rgio Garcia Carvalho" class="avatar-image">
                                     </div>
                                     <div class="developer-details">
                                         <h3>Desenvolvedor Full Stack</h3>
                                         <p>
-                                            Luiz Sérgio Garcia Carvalho, professor de Matemática e também Bacharel em Sistemas de Informações.
-                                            Profissional apaixonado por tecnologia e educação, com experiência em sala de aula e novo no 
-                                            desenvolvimento de aplicações web modernas e responsivas. Comprometido em criar soluções que realmente 
-                                            façam a diferença na vida dos usuários.
+                                            Luiz S?rgio Garcia Carvalho ? professor de Matem?tica e Bacharel em Sistemas de Informa??o.
+                                            O QuizMaster une experi?ncia em educa??o e tecnologia para oferecer uma ferramenta pr?tica,
+                                            responsiva e voltada ao acompanhamento pedag?gico.
                                         </p>
                                         <div class="tech-item">
-                                            <h3>Habilidades Técnicas:</h3>
+                                            <h3>Habilidades T?cnicas:</h3>
                                             <i class="fab fa-js-square"></i>
                                             <span>JavaScript</span>
                                         </div>
@@ -326,12 +389,12 @@
                         <div class="about-section-content">
                             <h2><i class="fas fa-heart"></i> Agradecimentos</h2>
                             <p>
-                                Agradeço a todos os usuários que utilizam o QuizMaster e contribuem para o crescimento 
-                                desta plataforma. Seu feedback é essencial para continuarmos melhorando e oferecendo 
-                                a melhor experiência possível.
+                                Obrigado a todos os usu?rios que utilizam o QuizMaster e ajudam a evoluir a plataforma. As melhorias
+                                recentes refor?am o controle por perfil, o gerenciamento de salas e alunos, o menu de perfil e a
+                                seguran?a das regras do Firebase.
                             </p>
                             <p class="version-info">
-                                <strong>Versão:</strong> 1.0.3 | <strong>Última atualização:</strong> fevereiro de 2026
+                                <strong>Vers?o:</strong> 1.1.0 | <strong>?ltima atualiza??o:</strong> agosto de 2026
                             </p>
                         </div>
                     </div>
@@ -524,39 +587,91 @@
                 <div class="about-container">
                     <div class="about-header">
                         <h1>Sobre o QuizMaster</h1>
-                        <p>Uma plataforma educacional inovadora para testar e expandir seus conhecimentos</p>
+                        <p>Uma plataforma educacional para gerenciar usu?rios, salas, quizzes, quest?es, rankings e relat?rios.</p>
+                        <p>Como administrador, voc? tamb?m possui os recursos de professor e controla permiss?es administrativas do sistema.</p>
                     </div>
 
                     <div class="about-content">
                         <div class="about-section-content">
-                            <h2><i class="fas fa-rocket"></i> Sobre a Aplicação</h2>
+                            <h2><i class="fas fa-rocket"></i> Sobre a Aplica??o</h2>
                             <p>
-                                O <strong>QuizMaster</strong> é uma plataforma web desenvolvida para proporcionar uma experiência 
-                                educacional interativa e envolvente através de quizzes dinâmicos. Nossa missão é transformar 
-                                o aprendizado em uma jornada divertida e desafiadora, permitindo que estudantes testem seus 
-                                conhecimentos, acompanhem seu progresso e compitam de forma saudável com colegas.
+                                O <strong>QuizMaster</strong> ? uma plataforma web educacional para organizar quizzes, salas, alunos,
+                                rankings e relat?rios em um ambiente ?nico. A aplica??o trabalha com perfis de Aluno, Professor e
+                                Administrador, usando autentica??o pelo Firebase, regras de seguran?a no Firestore e pain?is espec?ficos
+                                para cada tipo de usu?rio.
                             </p>
-                            
+
                             <div class="features-grid">
                                 <div class="feature-card">
-                                    <i class="fas fa-brain"></i>
-                                    <h3>Quizzes Dinâmicos</h3>
-                                    <p>Questões aleatórias selecionadas de um banco de dados diversificado</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-trophy"></i>
-                                    <h3>Sistema de Ranking</h3>
-                                    <p>Classificação em tempo real baseada no desempenho dos usuários</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-chart-line"></i>
-                                    <h3>Análise de Desempenho</h3>
-                                    <p>Relatórios detalhados e histórico completo de tentativas</p>
+                                    <i class="fas fa-user-lock"></i>
+                                    <h3>Autentica??o</h3>
+                                    <p>Login com e-mail e senha, login com Google, sess?o persistente e controle por tipo de usu?rio.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-users-cog"></i>
-                                    <h3>Painel Administrativo</h3>
-                                    <p>Ferramentas completas para gerenciar quizzes, questões e usuários</p>
+                                    <h3>Perfis de Acesso</h3>
+                                    <p>Aluno, Professor e Administrador possuem dashboards, permiss?es e menus adequados ao seu papel.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-door-open"></i>
+                                    <h3>Salas</h3>
+                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Alunos</h3>
+                                    <p>Professores visualizam usu?rios do tipo Aluno, cadastram novos alunos e editam dados e status.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-list-alt"></i>
+                                    <h3>Quizzes</h3>
+                                    <p>Administradores gerenciam quizzes globais; professores e admins tamb?m criam quizzes por sala.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-question-circle"></i>
+                                    <h3>Quest?es</h3>
+                                    <p>Banco de quest?es categorizadas com cadastro, edi??o, exclus?o e importa??o por JSON.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-trophy"></i>
+                                    <h3>Rankings</h3>
+                                    <p>?reas de ranking geral e ranking por quiz para acompanhar desempenho dos alunos.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chart-pie"></i>
+                                    <h3>Relat?rios</h3>
+                                    <p>Resumo de usu?rios, salas, quizzes e quest?es para acompanhamento administrativo e pedag?gico.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-cog"></i>
+                                    <h3>Perfil</h3>
+                                    <p>Professor e Administrador editam o pr?prio cadastro pelo menu Perfil no cabe?alho.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <h3>Seguran?a</h3>
+                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="about-section-content">
+                            <h2><i class="fas fa-users"></i> Funcionalidades por Perfil</h2>
+                            <div class="features-grid">
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Aluno</h3>
+                                    <p>Acessa quizzes dispon?veis, rankings, hist?rico e informa??es gerais da plataforma.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chalkboard-teacher"></i>
+                                    <h3>Professor</h3>
+                                    <p>Gerencia salas, quizzes por sala, alunos, relat?rios e seu pr?prio perfil, sem excluir usu?rios.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-shield"></i>
+                                    <h3>Administrador</h3>
+                                    <p>Gerencia usu?rios, salas, quizzes, quest?es, importa??es, rankings, relat?rios e novos admins.</p>
                                 </div>
                             </div>
                         </div>
@@ -578,11 +693,23 @@
                                 </div>
                                 <div class="tech-item">
                                     <i class="fas fa-database"></i>
-                                    <span>Firebase</span>
+                                    <span>Cloud Firestore</span>
                                 </div>
                                 <div class="tech-item">
                                     <i class="fab fa-google"></i>
-                                    <span>Firestore</span>
+                                    <span>Firebase Auth</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <span>Firestore Rules</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-cloud"></i>
+                                    <span>Firebase Hosting</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-icons"></i>
+                                    <span>Font Awesome</span>
                                 </div>
                             </div>
                         </div>
@@ -592,18 +719,17 @@
                             <div class="developer-info">
                                 <div class="developer-card">
                                     <div class="developer-avatar">
-                                        <img src="images/foto-perfil.jpg" alt="Luiz Sérgio Garcia Carvalho" class="avatar-image">
+                                        <img src="images/foto-perfil.jpg" alt="Luiz S?rgio Garcia Carvalho" class="avatar-image">
                                     </div>
                                     <div class="developer-details">
                                         <h3>Desenvolvedor Full Stack</h3>
                                         <p>
-                                            Luiz Sérgio Garcia Carvalho, professor de Matemática e também Bacharel em Sistemas de Informações.
-                                            Profissional apaixonado por tecnologia e educação, com experiência em sala de aula e novo no 
-                                            desenvolvimento de aplicações web modernas e responsivas. Comprometido em criar soluções que realmente 
-                                            façam a diferença na vida dos usuários.
+                                            Luiz S?rgio Garcia Carvalho ? professor de Matem?tica e Bacharel em Sistemas de Informa??o.
+                                            O QuizMaster une experi?ncia em educa??o e tecnologia para oferecer uma ferramenta pr?tica,
+                                            responsiva e voltada ao acompanhamento pedag?gico.
                                         </p>
                                         <div class="tech-item">
-                                            <h3>Habilidades Técnicas:</h3>
+                                            <h3>Habilidades T?cnicas:</h3>
                                             <i class="fab fa-js-square"></i>
                                             <span>JavaScript</span>
                                         </div>
@@ -636,12 +762,12 @@
                         <div class="about-section-content">
                             <h2><i class="fas fa-heart"></i> Agradecimentos</h2>
                             <p>
-                                Agradeço a todos os usuários que utilizam o QuizMaster e contribuem para o crescimento 
-                                desta plataforma. Seu feedback é essencial para continuarmos melhorando e oferecendo 
-                                a melhor experiência possível.
+                                Obrigado a todos os usu?rios que utilizam o QuizMaster e ajudam a evoluir a plataforma. As melhorias
+                                recentes refor?am o controle por perfil, o gerenciamento de salas e alunos, o menu de perfil e a
+                                seguran?a das regras do Firebase.
                             </p>
                             <p class="version-info">
-                                <strong>Versão:</strong> 1.0.3 | <strong>Última atualização:</strong> fevereiro de 2026
+                                <strong>Vers?o:</strong> 1.1.0 | <strong>?ltima atualiza??o:</strong> agosto de 2026
                             </p>
                         </div>
                     </div>
@@ -739,7 +865,7 @@
             <div id="teacher-users-section" class="section">
                 <div class="section-header">
                     <h2>Alunos Vinculados</h2>
-                    <p>Visualize e edite somente os alunos das suas salas</p>
+                    <p>Visualize e edite usu?rios do tipo Aluno</p>
                     <button id="create-student-btn" class="btn btn-primary">
                         <i class="fas fa-user-plus"></i>
                         <span class="btn-text">Cadastrar Aluno</span>
@@ -777,40 +903,91 @@
                 <div class="about-container">
                     <div class="about-header">
                         <h1>Sobre o QuizMaster</h1>
-                        <p>Uma plataforma educacional inovadora para testar e expandir seus conhecimentos.</p>
-                        <p>Ferramentas para professores acompanharem salas, quizzes e desempenho dos alunos.</p>
+                        <p>Uma plataforma educacional para organizar salas, alunos, quizzes e acompanhamento pedag?gico.</p>
+                        <p>Como professor, voc? gerencia salas, alunos, quizzes por sala, relat?rios e seu pr?prio perfil.</p>
                     </div>
 
                     <div class="about-content">
                         <div class="about-section-content">
-                            <h2><i class="fas fa-rocket"></i> Sobre a Aplicação</h2>
+                            <h2><i class="fas fa-rocket"></i> Sobre a Aplica??o</h2>
                             <p>
-                                O <strong>QuizMaster</strong> é uma plataforma web desenvolvida para proporcionar uma experiência 
-                                educacional interativa e envolvente através de quizzes dinâmicos. Nossa missão é transformar 
-                                o aprendizado em uma jornada divertida e desafiadora, permitindo que estudantes testem seus 
-                                conhecimentos, acompanhem seu progresso e compitam de forma saudável com colegas.
+                                O <strong>QuizMaster</strong> ? uma plataforma web educacional para organizar quizzes, salas, alunos,
+                                rankings e relat?rios em um ambiente ?nico. A aplica??o trabalha com perfis de Aluno, Professor e
+                                Administrador, usando autentica??o pelo Firebase, regras de seguran?a no Firestore e pain?is espec?ficos
+                                para cada tipo de usu?rio.
                             </p>
-                            
+
                             <div class="features-grid">
                                 <div class="feature-card">
-                                    <i class="fas fa-brain"></i>
-                                    <h3>Quizzes Dinâmicos</h3>
-                                    <p>Questões aleatórias selecionadas de um banco de dados diversificado</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-trophy"></i>
-                                    <h3>Sistema de Ranking</h3>
-                                    <p>Classificação em tempo real baseada no desempenho dos usuários</p>
-                                </div>
-                                <div class="feature-card">
-                                    <i class="fas fa-chart-line"></i>
-                                    <h3>Análise de Desempenho</h3>
-                                    <p>Relatórios detalhados e histórico completo de tentativas</p>
+                                    <i class="fas fa-user-lock"></i>
+                                    <h3>Autentica??o</h3>
+                                    <p>Login com e-mail e senha, login com Google, sess?o persistente e controle por tipo de usu?rio.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-users-cog"></i>
-                                    <h3>Painel Administrativo</h3>
-                                    <p>Ferramentas completas para gerenciar quizzes, questões e usuários</p>
+                                    <h3>Perfis de Acesso</h3>
+                                    <p>Aluno, Professor e Administrador possuem dashboards, permiss?es e menus adequados ao seu papel.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-door-open"></i>
+                                    <h3>Salas</h3>
+                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Alunos</h3>
+                                    <p>Professores visualizam usu?rios do tipo Aluno, cadastram novos alunos e editam dados e status.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-list-alt"></i>
+                                    <h3>Quizzes</h3>
+                                    <p>Administradores gerenciam quizzes globais; professores e admins tamb?m criam quizzes por sala.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-question-circle"></i>
+                                    <h3>Quest?es</h3>
+                                    <p>Banco de quest?es categorizadas com cadastro, edi??o, exclus?o e importa??o por JSON.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-trophy"></i>
+                                    <h3>Rankings</h3>
+                                    <p>?reas de ranking geral e ranking por quiz para acompanhar desempenho dos alunos.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chart-pie"></i>
+                                    <h3>Relat?rios</h3>
+                                    <p>Resumo de usu?rios, salas, quizzes e quest?es para acompanhamento administrativo e pedag?gico.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-cog"></i>
+                                    <h3>Perfil</h3>
+                                    <p>Professor e Administrador editam o pr?prio cadastro pelo menu Perfil no cabe?alho.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <h3>Seguran?a</h3>
+                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="about-section-content">
+                            <h2><i class="fas fa-users"></i> Funcionalidades por Perfil</h2>
+                            <div class="features-grid">
+                                <div class="feature-card">
+                                    <i class="fas fa-user-graduate"></i>
+                                    <h3>Aluno</h3>
+                                    <p>Acessa quizzes dispon?veis, rankings, hist?rico e informa??es gerais da plataforma.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-chalkboard-teacher"></i>
+                                    <h3>Professor</h3>
+                                    <p>Gerencia salas, quizzes por sala, alunos, relat?rios e seu pr?prio perfil, sem excluir usu?rios.</p>
+                                </div>
+                                <div class="feature-card">
+                                    <i class="fas fa-user-shield"></i>
+                                    <h3>Administrador</h3>
+                                    <p>Gerencia usu?rios, salas, quizzes, quest?es, importa??es, rankings, relat?rios e novos admins.</p>
                                 </div>
                             </div>
                         </div>
@@ -832,11 +1009,23 @@
                                 </div>
                                 <div class="tech-item">
                                     <i class="fas fa-database"></i>
-                                    <span>Firebase</span>
+                                    <span>Cloud Firestore</span>
                                 </div>
                                 <div class="tech-item">
                                     <i class="fab fa-google"></i>
-                                    <span>Firestore</span>
+                                    <span>Firebase Auth</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-shield-alt"></i>
+                                    <span>Firestore Rules</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-cloud"></i>
+                                    <span>Firebase Hosting</span>
+                                </div>
+                                <div class="tech-item">
+                                    <i class="fas fa-icons"></i>
+                                    <span>Font Awesome</span>
                                 </div>
                             </div>
                         </div>
@@ -846,18 +1035,17 @@
                             <div class="developer-info">
                                 <div class="developer-card">
                                     <div class="developer-avatar">
-                                        <img src="images/foto-perfil.jpg" alt="Luiz Sérgio Garcia Carvalho" class="avatar-image">
+                                        <img src="images/foto-perfil.jpg" alt="Luiz S?rgio Garcia Carvalho" class="avatar-image">
                                     </div>
                                     <div class="developer-details">
                                         <h3>Desenvolvedor Full Stack</h3>
                                         <p>
-                                            Luiz Sérgio Garcia Carvalho, professor de Matemática e também Bacharel em Sistemas de Informações.
-                                            Profissional apaixonado por tecnologia e educação, com experiência em sala de aula e novo no 
-                                            desenvolvimento de aplicações web modernas e responsivas. Comprometido em criar soluções que realmente 
-                                            façam a diferença na vida dos usuários.
+                                            Luiz S?rgio Garcia Carvalho ? professor de Matem?tica e Bacharel em Sistemas de Informa??o.
+                                            O QuizMaster une experi?ncia em educa??o e tecnologia para oferecer uma ferramenta pr?tica,
+                                            responsiva e voltada ao acompanhamento pedag?gico.
                                         </p>
                                         <div class="tech-item">
-                                            <h3>Habilidades Técnicas:</h3>
+                                            <h3>Habilidades T?cnicas:</h3>
                                             <i class="fab fa-js-square"></i>
                                             <span>JavaScript</span>
                                         </div>
@@ -890,12 +1078,12 @@
                         <div class="about-section-content">
                             <h2><i class="fas fa-heart"></i> Agradecimentos</h2>
                             <p>
-                                Agradeço a todos os usuários que utilizam o QuizMaster e contribuem para o crescimento 
-                                desta plataforma. Seu feedback é essencial para continuarmos melhorando e oferecendo 
-                                a melhor experiência possível.
+                                Obrigado a todos os usu?rios que utilizam o QuizMaster e ajudam a evoluir a plataforma. As melhorias
+                                recentes refor?am o controle por perfil, o gerenciamento de salas e alunos, o menu de perfil e a
+                                seguran?a das regras do Firebase.
                             </p>
                             <p class="version-info">
-                                <strong>Versão:</strong> 1.0.3 | <strong>Última atualização:</strong> fevereiro de 2026
+                                <strong>Vers?o:</strong> 1.1.0 | <strong>?ltima atualiza??o:</strong> agosto de 2026
                             </p>
                         </div>
                     </div>
