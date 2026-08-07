@@ -1,0 +1,147 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function currentUserExists() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return currentUserExists() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'admin';
+    }
+
+    function isProfessor() {
+      return currentUserExists() && (
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'professor' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'prof'
+      );
+    }
+
+    function isAdminOrProfessor() {
+      return isAdmin() || isProfessor();
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isValidUserType(userType) {
+      return userType == 'aluno' || userType == 'professor' || userType == 'prof' || userType == 'admin';
+    }
+
+    function isStudentUserData(data) {
+      return data.userType == 'aluno';
+    }
+
+    function ownsExistingResource() {
+      return resource.data.ownerId == request.auth.uid || resource.data.teacherId == request.auth.uid;
+    }
+
+    function ownsRequestedResource() {
+      return request.resource.data.ownerId == request.auth.uid || request.resource.data.teacherId == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow get: if signedIn() && (
+        isSelf(userId) ||
+        isAdmin() ||
+        (isProfessor() && isStudentUserData(resource.data))
+      );
+
+      allow list: if isAdmin() || (isProfessor() && isStudentUserData(resource.data));
+
+      allow create: if signedIn() && (
+        (isSelf(userId) && isValidUserType(request.resource.data.userType)) ||
+        (isAdmin() && isValidUserType(request.resource.data.userType)) ||
+        (isProfessor() && isStudentUserData(request.resource.data))
+      );
+
+      allow update: if signedIn() && (
+        (isSelf(userId) && request.resource.data.userType == resource.data.userType) ||
+        isAdmin() ||
+        (isProfessor() && isStudentUserData(resource.data) && isStudentUserData(request.resource.data))
+      );
+
+      allow delete: if isAdmin() || (isProfessor() && isStudentUserData(resource.data));
+    }
+
+    match /rooms/{roomId} {
+      allow get, list: if signedIn() && (
+        isAdmin() ||
+        ownsExistingResource() ||
+        (resource.data.studentIds is list && request.auth.uid in resource.data.studentIds)
+      );
+
+      allow create: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && ownsRequestedResource())
+      );
+
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && ownsExistingResource() && ownsRequestedResource())
+      );
+
+      allow delete: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && ownsExistingResource())
+      );
+    }
+
+    match /quizzes/{quizId} {
+      allow read: if signedIn();
+
+      allow create: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && request.resource.data.visibility == 'room' && ownsRequestedResource())
+      );
+
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (
+          isProfessor() &&
+          resource.data.visibility == 'room' &&
+          request.resource.data.visibility == 'room' &&
+          ownsExistingResource() &&
+          ownsRequestedResource()
+        )
+      );
+
+      allow delete: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && resource.data.visibility == 'room' && ownsExistingResource())
+      );
+    }
+
+    match /questions/{questionId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /userQuizzes/{userQuizId} {
+      allow read: if signedIn() && (
+        isAdminOrProfessor() ||
+        resource.data.userId == request.auth.uid
+      );
+
+      allow create: if signedIn() && (
+        isAdmin() ||
+        request.resource.data.userId == request.auth.uid
+      );
+
+      allow update, delete: if signedIn() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid
+      );
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1326,16 +1326,43 @@ function firebaseOrderByCreatedDesc(items) {
     });
 }
 
+function snapshotToItems(snapshot) {
+    const items = [];
+    snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+    return items;
+}
+
+function fetchQuery(query) {
+    return query.get().then(snapshotToItems);
+}
+
 function fetchCollection(name) {
-    return db.collection(name).get().then(snapshot => {
-        const items = [];
-        snapshot.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
-        return items;
-    });
+    return fetchQuery(db.collection(name));
+}
+
+function fetchCollectionWhere(name, field, operator, value) {
+    return fetchQuery(db.collection(name).where(field, operator, value));
+}
+
+function uniqueById(items) {
+    return Array.from(new Map(items.map(item => [item.id, item])).values());
 }
 
 function fetchUsersByType(userType) {
-    return fetchCollection('users').then(users => users.filter(user => user.userType === userType));
+    return fetchCollectionWhere('users', 'userType', '==', userType);
+}
+
+function fetchStudentRooms() {
+    if (!currentUser) return Promise.resolve([]);
+    return fetchCollectionWhere('rooms', 'studentIds', 'array-contains', currentUser.uid);
+}
+
+function fetchManagedRoomsForTeacher() {
+    if (!currentUser) return Promise.resolve([]);
+    return Promise.all([
+        fetchCollectionWhere('rooms', 'ownerId', '==', currentUser.uid),
+        fetchCollectionWhere('rooms', 'teacherId', '==', currentUser.uid)
+    ]).then(results => uniqueById(results.flat()));
 }
 
 function createManagedAuthUser(email, password) {
@@ -1612,7 +1639,15 @@ function roomVisibleForCurrentUser(room) {
 }
 
 function getManagedRooms() {
-    return fetchCollection('rooms').then(rooms => firebaseOrderByCreatedDesc(rooms.filter(roomVisibleForCurrentUser)));
+    if (isAdminUser()) {
+        return fetchCollection('rooms').then(rooms => firebaseOrderByCreatedDesc(rooms));
+    }
+
+    if (isTeacherUser()) {
+        return fetchManagedRoomsForTeacher().then(rooms => firebaseOrderByCreatedDesc(rooms.filter(roomVisibleForCurrentUser)));
+    }
+
+    return Promise.resolve([]);
 }
 
 function renderRooms(listId, rooms) {
@@ -2324,7 +2359,7 @@ function importQuestions() {
 function loadQuizzes() {
     const list = setListLoading('quizzes-list', 'Carregando quizzes...');
     if (!list) return Promise.resolve();
-    return Promise.all([fetchCollection('quizzes'), fetchCollection('rooms')])
+    return Promise.all([fetchCollection('quizzes'), fetchStudentRooms()])
         .then(([quizzes, rooms]) => {
             const activeRooms = rooms.filter(room => (room.studentIds || []).includes(currentUser.uid));
             const roomIds = activeRooms.map(room => room.id);
@@ -2366,39 +2401,58 @@ function loadAdminRanking() {
 }
 
 function loadTeacherRanking() {
-    return loadGenericRanking('teacher-ranking-list');
+    const listId = 'teacher-ranking-list';
+    const list = setListLoading(listId, 'Carregando ranking...');
+    if (!list) return Promise.resolve();
+
+    return Promise.all([getManagedRooms(), fetchUsersByType('aluno'), fetchCollection('userQuizzes')])
+        .then(([rooms, students, results]) => {
+            const roomIds = rooms.map(room => room.id);
+            const visibleStudents = students.filter(student => (student.roomIds || []).some(roomId => roomIds.includes(roomId)));
+            const visibleStudentIds = new Set(visibleStudents.map(student => student.id));
+            renderRankingList(listId, results.filter(result => visibleStudentIds.has(result.userId)), visibleStudents);
+        })
+        .catch(error => {
+            console.error('Erro ao carregar ranking do professor:', error);
+            setListEmpty(listId, 'Erro ao carregar ranking.');
+        });
 }
 
 function loadGenericRanking(listId) {
     const list = setListLoading(listId, 'Carregando ranking...');
     if (!list) return Promise.resolve();
     return Promise.all([fetchCollection('userQuizzes'), fetchCollection('users')])
-        .then(([results, users]) => {
-            const usersMap = Object.fromEntries(users.map(user => [user.id, user]));
-            const scores = {};
-            results.filter(result => result.status === 'completed').forEach(result => {
-                const userId = result.userId;
-                if (!scores[userId]) scores[userId] = { userId, totalScore: 0, totalQuizzes: 0 };
-                scores[userId].totalScore += Number(result.score || 0);
-                scores[userId].totalQuizzes += 1;
-            });
-            const ranking = Object.values(scores).sort((a, b) => b.totalScore - a.totalScore);
-            if (!ranking.length) return setListEmpty(listId, 'Nenhum resultado encontrado.');
-            list.innerHTML = ranking.map((item, index) => `
-                <div class="ranking-item">
-                    <div class="ranking-position">${index + 1}</div>
-                    <div class="ranking-info">
-                        <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuario')}</div>
-                        <div class="ranking-details">${item.totalQuizzes} quiz(es)</div>
-                    </div>
-                    <div class="ranking-score">${item.totalScore} pts</div>
-                </div>
-            `).join('');
-        })
+        .then(([results, users]) => renderRankingList(listId, results, users))
         .catch(error => {
             console.error('Erro ao carregar ranking:', error);
             setListEmpty(listId, 'Erro ao carregar ranking.');
         });
+}
+
+function renderRankingList(listId, results, users) {
+    const list = document.getElementById(listId);
+    if (!list) return;
+
+    const usersMap = Object.fromEntries(users.map(user => [user.id, user]));
+    const scores = {};
+    results.filter(result => result.status === 'completed').forEach(result => {
+        const userId = result.userId;
+        if (!scores[userId]) scores[userId] = { userId, totalScore: 0, totalQuizzes: 0 };
+        scores[userId].totalScore += Number(result.score || 0);
+        scores[userId].totalQuizzes += 1;
+    });
+    const ranking = Object.values(scores).sort((a, b) => b.totalScore - a.totalScore);
+    if (!ranking.length) return setListEmpty(listId, 'Nenhum resultado encontrado.');
+    list.innerHTML = ranking.map((item, index) => `
+        <div class="ranking-item">
+            <div class="ranking-position">${index + 1}</div>
+            <div class="ranking-info">
+                <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuario')}</div>
+                <div class="ranking-details">${item.totalQuizzes} quiz(es)</div>
+            </div>
+            <div class="ranking-score">${item.totalScore} pts</div>
+        </div>
+    `).join('');
 }
 
 function loadQuizRankings() {
@@ -2422,7 +2476,26 @@ function loadAdminReports() {
 }
 
 function loadTeacherReports() {
-    return loadReports('teacher-reports-content');
+    const containerId = 'teacher-reports-content';
+    const container = setListLoading(containerId, 'Carregando relatorios...');
+    if (!container) return Promise.resolve();
+
+    return Promise.all([getManagedRooms(), fetchUsersByType('aluno'), fetchCollection('quizzes'), fetchCollection('questions')])
+        .then(([rooms, students, quizzes, questions]) => {
+            const roomIds = rooms.map(room => room.id);
+            const visibleStudents = students.filter(student => (student.roomIds || []).some(roomId => roomIds.includes(roomId)));
+            const visibleQuizzes = quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds));
+            container.innerHTML = `
+                <div class="card"><div class="card-content"><h3>${visibleStudents.length}</h3><p>Alunos</p></div></div>
+                <div class="card"><div class="card-content"><h3>${rooms.length}</h3><p>Salas</p></div></div>
+                <div class="card"><div class="card-content"><h3>${visibleQuizzes.length}</h3><p>Quizzes</p></div></div>
+                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questoes</p></div></div>
+            `;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar relatorios do professor:', error);
+            setListEmpty(containerId, 'Erro ao carregar relatorios.');
+        });
 }
 
 function loadReports(containerId) {
