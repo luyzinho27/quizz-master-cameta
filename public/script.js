@@ -81,6 +81,7 @@ let teacherStudentsCache = [];
 let teacherQuizzesCache = [];
 let teacherUsersCache = [];
 let editingTeacherTargetUserType = 'aluno';
+let editingUserProfileMode = false;
 
 // Elementos da DOM
 const authContainer = document.getElementById('auth-container');
@@ -1068,6 +1069,11 @@ function initEventListeners() {
     safeOn('student-logout', 'click', logout);
     safeOn('admin-logout', 'click', logout);
     safeOn('teacher-logout', 'click', logout);
+    safeOn('admin-account-menu-toggle', 'click', event => toggleAccountMenu('admin', event));
+    safeOn('teacher-account-menu-toggle', 'click', event => toggleAccountMenu('teacher', event));
+    safeOn('admin-profile-btn', 'click', () => openCurrentUserProfile());
+    safeOn('teacher-profile-btn', 'click', () => openCurrentUserProfile());
+    document.addEventListener('click', closeAccountMenus);
 
     initTabNavigation();
     initQuizControls();
@@ -1479,6 +1485,44 @@ function setText(id, value) {
     if (element) element.textContent = value || '';
 }
 
+function closeAccountMenus() {
+    ['admin', 'teacher'].forEach(role => {
+        const menu = document.getElementById(`${role}-account-menu`);
+        const toggle = document.getElementById(`${role}-account-menu-toggle`);
+        if (menu) menu.classList.add('hidden');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
+}
+
+function toggleAccountMenu(role, event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById(`${role}-account-menu`);
+    const toggle = document.getElementById(`${role}-account-menu-toggle`);
+    if (!menu || !toggle) return;
+
+    const willOpen = menu.classList.contains('hidden');
+    closeAccountMenus();
+    if (willOpen) {
+        menu.classList.remove('hidden');
+        toggle.setAttribute('aria-expanded', 'true');
+    }
+}
+
+function openCurrentUserProfile() {
+    closeAccountMenus();
+    if (!currentUser || !currentUser.uid) return alert('Usuario autenticado invalido.');
+
+    if (isAdminUser()) {
+        return openUserModal(currentUser.uid, { profileMode: true });
+    }
+
+    if (isTeacherUser()) {
+        return openTeacherUserModal(currentUser.uid, { profileMode: true });
+    }
+
+    return null;
+}
+
 const originalShowDashboard = showDashboard;
 showDashboard = function() {
     originalShowDashboard();
@@ -1842,15 +1886,16 @@ function loadTeacherQuizzes() {
         });
 }
 
-function openTeacherUserModal(userId = null) {
+function openTeacherUserModal(userId = null, options = {}) {
     if (!canManageTeacherResources()) return alert('Acesso negado.');
     editingTeacherUserId = userId;
     editingTeacherTargetUserType = 'aluno';
-    setText('teacher-user-modal-title', userId ? 'Editar Usuario' : 'Cadastrar Aluno');
+    const profileMode = Boolean(options.profileMode);
+    setText('teacher-user-modal-title', profileMode ? 'Editar Perfil' : userId ? 'Editar Usuario' : 'Cadastrar Aluno');
     ['teacher-user-name', 'teacher-user-email', 'teacher-user-password'].forEach(id => setValue(id, ''));
     setValue('teacher-user-status', 'active');
 
-    Promise.all([
+    return Promise.all([
         getManagedRooms(),
         userId ? db.collection('users').doc(userId).get() : Promise.resolve(null)
     ]).then(([rooms, userDoc]) => {
@@ -1863,7 +1908,7 @@ function openTeacherUserModal(userId = null) {
 
             editingTeacherTargetUserType = user.userType || 'aluno';
             const isOwnProfile = isTeacherUser() && userId === currentUser.uid;
-            setText('teacher-user-modal-title', isOwnProfile ? 'Editar Meu Cadastro' : 'Editar Aluno');
+            setText('teacher-user-modal-title', isOwnProfile ? 'Editar Perfil' : 'Editar Aluno');
             setValue('teacher-user-name', user.name || '');
             setValue('teacher-user-email', user.email || '');
             setValue('teacher-user-status', user.status || 'active');
@@ -1947,24 +1992,10 @@ function saveTeacherUser() {
 
 function loadTeacherUsers() {
     setListLoading('teacher-users-list', 'Carregando alunos...');
-    const usersRequest = isAdminUser()
-        ? fetchCollection('users')
-        : Promise.all([
-            fetchUsersByType('aluno'),
-            currentUser ? db.collection('users').doc(currentUser.uid).get() : Promise.resolve(null)
-        ]).then(([students, ownDoc]) => {
-            const ownUser = ownDoc && ownDoc.exists ? { id: ownDoc.id, ...ownDoc.data() } : null;
-            return uniqueById([ownUser, ...students].filter(Boolean));
-        });
-
-    return usersRequest
+    return fetchUsersByType('aluno')
         .then(users => {
-            teacherUsersCache = users.sort((a, b) => {
-                if (a.id === currentUser.uid) return -1;
-                if (b.id === currentUser.uid) return 1;
-                return (a.name || '').localeCompare(b.name || '', 'pt-BR');
-            });
-            renderUsers('teacher-users-list', teacherUsersCache, { teacherMode: true, allowDelete: false });
+            teacherUsersCache = users.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
+            renderUsers('teacher-users-list', teacherUsersCache, { teacherMode: true, allowDelete: isAdminUser() });
         })
         .catch(error => {
             console.error('Erro ao carregar alunos:', error);
@@ -2026,20 +2057,22 @@ function filterAdminUsers(query) {
     renderUsers('admin-users-list', users);
 }
 
-function openUserModal(userId = null) {
+function openUserModal(userId = null, options = {}) {
     if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuarios.');
     editingUserId = userId;
-    setText('user-modal-title', userId ? 'Editar Usuario' : 'Criar Usuario');
+    editingUserProfileMode = Boolean(options.profileMode);
+    setText('user-modal-title', editingUserProfileMode ? 'Editar Perfil' : userId ? 'Editar Usuario' : 'Criar Usuario');
     ['user-name', 'user-email', 'user-password'].forEach(id => setValue(id, ''));
     setValue('user-type', 'aluno');
     setValue('user-status', 'active');
 
     if (!userId) {
+        editingUserProfileMode = false;
         document.getElementById('user-modal').classList.remove('hidden');
-        return;
+        return Promise.resolve();
     }
 
-    db.collection('users').doc(userId).get().then(doc => {
+    return db.collection('users').doc(userId).get().then(doc => {
         if (!doc.exists) throw new Error('Usuario nao encontrado.');
         const user = doc.data();
         setValue('user-name', user.name || '');
@@ -2053,6 +2086,7 @@ function openUserModal(userId = null) {
 function closeUserModal() {
     document.getElementById('user-modal').classList.add('hidden');
     editingUserId = null;
+    editingUserProfileMode = false;
 }
 
 function saveUser() {
@@ -2073,7 +2107,11 @@ function saveUser() {
             status,
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         }, { merge: true }).then(() => {
-            alert('Usuario atualizado com sucesso!');
+            if (editingUserId === currentUser.uid) {
+                currentUser = { ...currentUser, name, email, userType, status };
+                setText('admin-name', name || email);
+            }
+            alert(editingUserProfileMode ? 'Perfil atualizado com sucesso!' : 'Usuario atualizado com sucesso!');
             closeUserModal();
             loadAdminUsers();
         }).catch(error => alert('Erro ao atualizar usuario: ' + getAuthErrorMessage(error)));

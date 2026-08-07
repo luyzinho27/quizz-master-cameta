@@ -386,9 +386,17 @@
                 </nav>
             </div>
             <div class="user-info">
-                <div class="user-details">
-                    <span id="admin-name" class="user-name"></span>
-                    <span class="user-role">Administrador</span>
+                <div class="profile-menu">
+                    <button id="admin-account-menu-toggle" class="user-details account-menu-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+                        <span id="admin-name" class="user-name"></span>
+                        <span class="user-role">Administrador</span>
+                    </button>
+                    <div id="admin-account-menu" class="account-menu hidden">
+                        <button id="admin-profile-btn" type="button" class="account-menu-item">
+                            <i class="fas fa-user-cog"></i>
+                            <span>Perfil</span>
+                        </button>
+                    </div>
                 </div>
                 <button id="admin-logout" class="btn btn-secondary">
                     <i class="fas fa-sign-out-alt"></i>
@@ -684,9 +692,17 @@
                 </nav>
             </div>
             <div class="user-info">
-                <div class="user-details">
-                    <span id="teacher-name" class="user-name"></span>
-                    <span class="user-role">Professor</span>
+                <div class="profile-menu">
+                    <button id="teacher-account-menu-toggle" class="user-details account-menu-toggle" type="button" aria-haspopup="true" aria-expanded="false">
+                        <span id="teacher-name" class="user-name"></span>
+                        <span class="user-role">Professor</span>
+                    </button>
+                    <div id="teacher-account-menu" class="account-menu hidden">
+                        <button id="teacher-profile-btn" type="button" class="account-menu-item">
+                            <i class="fas fa-user-cog"></i>
+                            <span>Perfil</span>
+                        </button>
+                    </div>
                 </div>
                 <button id="teacher-logout" class="btn btn-secondary">
                     <i class="fas fa-sign-out-alt"></i>
