@@ -17,7 +17,7 @@ function resolveFirebaseConfig() {
 const firebaseConfig = resolveFirebaseConfig();
 
 if (!firebaseConfig) {
-    const message = 'Configuracao do Firebase ausente. Crie public/config.js a partir de public/config.example.js.';
+    const message = 'Configuração do Firebase ausente. Crie public/config.js a partir de public/config.example.js.';
     console.error(message);
     throw new Error(message);
 }
@@ -82,6 +82,7 @@ let teacherQuizzesCache = [];
 let teacherUsersCache = [];
 let editingTeacherTargetUserType = 'aluno';
 let editingUserProfileMode = false;
+let pendingQuizLinkStarted = false;
 
 // Elementos da DOM
 const authContainer = document.getElementById('auth-container');
@@ -139,7 +140,7 @@ function saveQuizStateLocal(options = {}) {
     try {
         localStorage.setItem(getQuizStateKey(currentUser.uid, currentQuiz.id), JSON.stringify(state));
     } catch (error) {
-        console.warn('Nao foi possivel salvar o estado do quiz localmente:', error);
+        console.warn('Não foi possível salvar o estado do quiz localmente:', error);
     }
 }
 
@@ -159,7 +160,7 @@ function getActiveQuizStateForUser(userId) {
         }
         return latestState;
     } catch (error) {
-        console.warn('Nao foi possivel ler o estado do quiz localmente:', error);
+        console.warn('Não foi possível ler o estado do quiz localmente:', error);
         return null;
     }
 }
@@ -173,7 +174,7 @@ function getQuizStateForUser(userId, quizId) {
         if (!parsed || parsed.userId !== userId || parsed.quizId !== quizId) return null;
         return parsed;
     } catch (error) {
-        console.warn('Nao foi possivel ler o estado do quiz localmente:', error);
+        console.warn('Não foi possível ler o estado do quiz localmente:', error);
         return null;
     }
 }
@@ -183,7 +184,7 @@ function clearQuizStateLocal(userId, quizId) {
     try {
         localStorage.removeItem(getQuizStateKey(userId, quizId));
     } catch (error) {
-        console.warn('Nao foi possivel limpar o estado do quiz localmente:', error);
+        console.warn('Não foi possível limpar o estado do quiz localmente:', error);
     }
 }
 
@@ -351,6 +352,384 @@ function setQuizActive(active, options = {}) {
     } else if (options.persist !== false) {
         saveQuizStateLocal({ active: false });
     }
+}
+
+function formatSeconds(seconds) {
+    const safeSeconds = Math.max(0, Number(seconds) || 0);
+    const minutes = Math.floor(safeSeconds / 60);
+    const remainingSeconds = safeSeconds % 60;
+    return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function shuffleItems(items) {
+    const copy = [...items];
+    for (let index = copy.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [copy[index], copy[randomIndex]] = [copy[randomIndex], copy[index]];
+    }
+    return copy;
+}
+
+function getQuizLinkId() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('quiz') || params.get('q') || '';
+    } catch (error) {
+        return '';
+    }
+}
+
+function clearQuizLinkIdFromUrl() {
+    try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('quiz');
+        url.searchParams.delete('q');
+        window.history.replaceState({}, document.title, url.toString());
+    } catch (error) {
+        console.warn('Não foi possível limpar o link do quiz da URL:', error);
+    }
+}
+
+function getQuizAccessLink(quizId) {
+    const url = new URL(window.location.href);
+    url.searchParams.set('quiz', quizId);
+    return url.toString();
+}
+
+function copyQuizLink(quizId) {
+    const link = getQuizAccessLink(quizId);
+    const notify = () => alert(`Link copiado. Código do quiz: ${quizId}`);
+
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(link).then(notify).catch(() => {
+            window.prompt('Copie o link do quiz:', link);
+        });
+        return;
+    }
+
+    window.prompt('Copie o link do quiz:', link);
+}
+
+function studentCanAccessQuiz(quiz, rooms = []) {
+    if (!currentUser || currentUser.userType !== 'aluno' || !quiz || quiz.status !== 'active') return false;
+    if (quiz.visibility === 'specific') return (quiz.allowedStudents || []).includes(currentUser.uid);
+    if (quiz.visibility === 'room') {
+        const roomIds = rooms.map(room => room.id);
+        return Boolean(quiz.roomId && roomIds.includes(quiz.roomId));
+    }
+    return !quiz.visibility || quiz.visibility === 'all';
+}
+
+function updateUserQuizProgress() {
+    if (!currentUser || !currentQuiz || !userQuizId) return Promise.resolve();
+
+    const progress = {
+        answers: normalizeAnswers(userAnswers, currentQuestions.length),
+        currentQuestionIndex,
+        timeRemaining,
+        exitCount,
+        questionIds: currentQuestions.map(question => question.id).filter(Boolean),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    saveQuizStateLocal({ active: quizActive });
+    return db.collection('userQuizzes').doc(userQuizId).set(progress, { merge: true })
+        .catch(error => console.error('Erro ao salvar progresso do quiz:', error));
+}
+
+function stopQuizTimer() {
+    if (quizTimer) {
+        clearInterval(quizTimer);
+        quizTimer = null;
+    }
+}
+
+function updateTimerDisplay() {
+    setText('quiz-timer', formatSeconds(timeRemaining));
+    const timerProgress = document.getElementById('timer-progress');
+    if (timerProgress) {
+        const ratio = totalTime ? Math.max(0, Math.min(1, timeRemaining / totalTime)) : 0;
+        timerProgress.style.strokeDashoffset = String(175 - (175 * ratio));
+    }
+}
+
+function startQuizTimer() {
+    stopQuizTimer();
+    updateTimerDisplay();
+    quizTimer = setInterval(() => {
+        timeRemaining = Math.max(0, timeRemaining - 1);
+        updateTimerDisplay();
+        syncQuizProgress();
+        if (timeRemaining <= 0) {
+            finishQuiz({ forced: true });
+        }
+    }, 1000);
+}
+
+function showQuizScreen() {
+    hideDashboard();
+    quizResult.classList.add('hidden');
+    quizContainer.classList.remove('hidden');
+}
+
+function fetchQuestionsForQuiz(quiz, questionIds = []) {
+    if (questionIds.length) {
+        return Promise.all(questionIds.map(id => db.collection('questions').doc(id).get()))
+            .then(docs => docs.filter(doc => doc.exists).map(doc => ({ id: doc.id, ...doc.data() })));
+    }
+
+    const query = quiz.category
+        ? db.collection('questions').where('category', '==', quiz.category)
+        : db.collection('questions');
+
+    return fetchQuery(query).then(questions => {
+        const requestedCount = Math.max(1, Number(quiz.questionsCount) || questions.length);
+        return shuffleItems(questions).slice(0, requestedCount);
+    });
+}
+
+function loadQuizQuestions(quizId, options = {}) {
+    const quizRequest = currentQuiz && currentQuiz.id === quizId
+        ? Promise.resolve(currentQuiz)
+        : db.collection('quizzes').doc(quizId).get().then(doc => {
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
+            return { id: doc.id, ...doc.data() };
+        });
+
+    return quizRequest.then(quiz => {
+        currentQuiz = quiz;
+        return fetchQuestionsForQuiz(quiz, options.questionIds || []).then(questions => {
+            if (!questions.length) throw new Error('Nenhuma questão encontrada para este quiz.');
+
+            currentQuestions = questions;
+            userAnswers = normalizeAnswers(options.preserveAnswers ? userAnswers : [], currentQuestions.length);
+            currentQuestionIndex = Math.min(currentQuestionIndex, currentQuestions.length - 1);
+            totalTime = Math.max(60, (Number(quiz.time) || 0) * 60);
+            if (!timeRemaining || !options.resume) timeRemaining = totalTime;
+
+            setText('quiz-title-display', quiz.title || 'Quiz');
+            setText('quiz-description-display', quiz.description || '');
+            showQuizScreen();
+            displayQuestion();
+            startQuizTimer();
+            setQuizActive(true);
+            return true;
+        });
+    });
+}
+
+function startQuiz(quizId, options = {}) {
+    if (!currentUser || currentUser.userType !== 'aluno') {
+        alert('Apenas alunos podem iniciar quizzes.');
+        return Promise.resolve(false);
+    }
+
+    showLoading();
+    return Promise.all([
+        db.collection('quizzes').doc(quizId).get(),
+        fetchStudentRooms()
+    ]).then(([quizDoc, rooms]) => {
+        if (!quizDoc.exists) throw new Error('Quiz não encontrado.');
+        const quiz = { id: quizDoc.id, ...quizDoc.data() };
+        if (!studentCanAccessQuiz(quiz, rooms)) {
+            throw new Error('Este quiz não está disponível para sua conta.');
+        }
+
+        currentQuiz = quiz;
+        currentQuestions = [];
+        currentQuestionIndex = 0;
+        userAnswers = [];
+        exitCount = 0;
+        totalTime = Math.max(60, (Number(quiz.time) || 0) * 60);
+        timeRemaining = totalTime;
+        quizStartTime = Date.now();
+
+        return fetchQuestionsForQuiz(quiz).then(questions => {
+            if (!questions.length) throw new Error('Nenhuma questão encontrada para este quiz.');
+
+            currentQuestions = questions;
+            userAnswers = normalizeAnswers([], currentQuestions.length);
+            const attempt = {
+                userId: currentUser.uid,
+                userName: currentUser.name || currentUser.email || 'Aluno',
+                quizId: quiz.id,
+                quizTitle: quiz.title || 'Quiz',
+                roomId: quiz.roomId || null,
+                status: 'in-progress',
+                answers: userAnswers,
+                questionIds: currentQuestions.map(question => question.id).filter(Boolean),
+                currentQuestionIndex: 0,
+                timeRemaining,
+                totalTime,
+                exitCount,
+                score: 0,
+                startTime: firebase.firestore.FieldValue.serverTimestamp(),
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+
+            return db.collection('userQuizzes').add(attempt);
+        }).then(docRef => {
+            userQuizId = docRef.id;
+            hideLoading();
+            if (options.fromLink) clearQuizLinkIdFromUrl();
+            setText('quiz-title-display', quiz.title || 'Quiz');
+            setText('quiz-description-display', quiz.description || '');
+            showQuizScreen();
+            displayQuestion();
+            startQuizTimer();
+            setQuizActive(true);
+            return true;
+        });
+    }).catch(error => {
+        hideLoading();
+        console.error('Erro ao iniciar quiz:', error);
+        alert('Erro ao iniciar quiz: ' + getAuthErrorMessage(error));
+        return false;
+    });
+}
+
+function displayQuestion() {
+    if (!currentQuestions.length) return;
+    const question = currentQuestions[currentQuestionIndex];
+    setText('question-text', question.text || 'Questão sem enunciado.');
+    setText('option-a-text', question.options?.a || '');
+    setText('option-b-text', question.options?.b || '');
+    setText('option-c-text', question.options?.c || '');
+    setText('option-d-text', question.options?.d || '');
+    setText('current-question', String(currentQuestionIndex + 1));
+    setText('total-questions', String(currentQuestions.length));
+    setText('quiz-progress-text', `Questão ${currentQuestionIndex + 1}/${currentQuestions.length}`);
+
+    const progressFill = document.getElementById('progress-fill');
+    if (progressFill) {
+        progressFill.style.width = `${((currentQuestionIndex + 1) / currentQuestions.length) * 100}%`;
+    }
+
+    document.querySelectorAll('#options-container .option').forEach(option => {
+        option.classList.toggle('selected', option.dataset.value === userAnswers[currentQuestionIndex]);
+    });
+
+    const previousButton = document.getElementById('prev-question');
+    const nextButton = document.getElementById('next-question');
+    const finishButton = document.getElementById('finish-quiz');
+    if (previousButton) previousButton.disabled = currentQuestionIndex === 0;
+    if (nextButton) nextButton.classList.toggle('hidden', currentQuestionIndex >= currentQuestions.length - 1);
+    if (finishButton) finishButton.classList.toggle('hidden', currentQuestionIndex < currentQuestions.length - 1);
+
+    saveQuizStateLocal({ active: true });
+}
+
+function selectAnswer(answer) {
+    if (!currentQuestions.length || !['a', 'b', 'c', 'd'].includes(answer)) return;
+    userAnswers[currentQuestionIndex] = answer;
+    displayQuestion();
+    syncQuizProgress(true);
+}
+
+function showQuizResult(result) {
+    hideDashboard();
+    quizContainer.classList.add('hidden');
+    quizResult.classList.remove('hidden');
+    setText('score-percentage', `${result.percentage}%`);
+    setText('score-fraction', `${result.correct}/${result.total}`);
+    setText('correct-answers', String(result.correct));
+    setText('wrong-answers', String(result.wrong));
+    setText('time-taken', formatSeconds(result.timeTaken));
+    setText('ranking-position', '-');
+
+    const reviewButton = document.getElementById('review-quiz');
+    if (reviewButton) reviewButton.classList.toggle('hidden', currentQuiz && currentQuiz.allowReview === false);
+}
+
+function finishQuiz(options = {}) {
+    if (!currentQuiz || !currentQuestions.length || !userQuizId) return Promise.resolve(false);
+    const unansweredCount = userAnswers.filter(answer => !answer).length;
+    if (!options.forced && unansweredCount > 0 && !confirm(`Você ainda tem ${unansweredCount} questão(ões) sem resposta. Deseja finalizar mesmo assim?`)) {
+        return Promise.resolve(false);
+    }
+
+    stopQuizTimer();
+    const normalizedAnswers = normalizeAnswers(userAnswers, currentQuestions.length);
+    const correct = currentQuestions.reduce((total, question, index) => {
+        return total + (normalizedAnswers[index] === question.correctAnswer ? 1 : 0);
+    }, 0);
+    const total = currentQuestions.length;
+    const wrong = total - correct;
+    const percentage = total ? Math.round((correct / total) * 100) : 0;
+    const timeTaken = Math.max(0, totalTime - timeRemaining);
+    const result = { correct, wrong, total, percentage, timeTaken };
+
+    const payload = {
+        status: 'completed',
+        answers: normalizedAnswers,
+        currentQuestionIndex,
+        questionIds: currentQuestions.map(question => question.id).filter(Boolean),
+        score: percentage,
+        correctAnswers: correct,
+        wrongAnswers: wrong,
+        totalQuestions: total,
+        timeTaken,
+        completedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    return db.collection('userQuizzes').doc(userQuizId).set(payload, { merge: true })
+        .then(() => {
+            setQuizActive(false, { clearLocal: true, persist: false });
+            showQuizResult(result);
+            return true;
+        })
+        .catch(error => {
+            console.error('Erro ao finalizar quiz:', error);
+            alert('Erro ao finalizar quiz: ' + getAuthErrorMessage(error));
+            startQuizTimer();
+            return false;
+        });
+}
+
+function handleReviewClick() {
+    if (!currentQuestions.length) return alert('Nenhuma revisão disponível.');
+    if (currentQuiz && currentQuiz.allowReview === false) return alert('A revisão deste quiz não está disponível.');
+
+    const content = document.getElementById('review-content');
+    if (!content) return;
+    content.innerHTML = currentQuestions.map((question, index) => {
+        const userAnswer = userAnswers[index] || '-';
+        const correctAnswer = question.correctAnswer || '-';
+        const isCorrect = userAnswer === correctAnswer;
+        return `
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Questão ${index + 1}</h3>
+                    <span class="card-badge ${isCorrect ? '' : 'card-badge-secondary'}">${isCorrect ? 'Correta' : 'Incorreta'}</span>
+                </div>
+                <div class="card-content">
+                    <p>${escapeHtml(question.text || '')}</p>
+                    <p><strong>Sua resposta:</strong> ${escapeHtml(userAnswer.toUpperCase())}</p>
+                    <p><strong>Resposta correta:</strong> ${escapeHtml(correctAnswer.toUpperCase())}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    document.getElementById('review-modal').classList.remove('hidden');
+}
+
+function closeReviewModal() {
+    document.getElementById('review-modal').classList.add('hidden');
+}
+
+function attemptStartQuizFromLink() {
+    const quizId = getQuizLinkId();
+    if (!quizId || pendingQuizLinkStarted || !currentUser || currentUser.userType !== 'aluno') {
+        return Promise.resolve(false);
+    }
+
+    pendingQuizLinkStarted = true;
+    return startQuiz(quizId, { fromLink: true }).then(started => {
+        if (!started) pendingQuizLinkStarted = false;
+        return started;
+    });
 }
 
 function handleQuizBeforeUnload() {
@@ -708,7 +1087,7 @@ function checkAdminExists() {
             const adminOption = document.getElementById('admin-option');
             if (adminOption) {
                 adminOption.disabled = true;
-                adminOption.textContent = 'Administrador (verificacao indisponivel)';
+                adminOption.textContent = 'Administrador (verificação indisponível)';
             }
             return true;
         });
@@ -777,10 +1156,12 @@ function confirmExitQuiz() {
         showDashboard();
         return;
     }
-    const confirmMsg = 'Tem certeza que deseja sair do quiz? Todas as respostas não salvas serão perdidas.';
+    const confirmMsg = 'Tem certeza que deseja sair do quiz? O progresso local deste quiz será descartado.';
     if (!confirm(confirmMsg)) {
         return;
     }
+    stopQuizTimer();
+    setQuizActive(false, { clearLocal: true, persist: false });
     // Limpar estado local do quiz
     if (currentUser && currentQuiz) {
         clearQuizStateLocal(currentUser.uid, currentQuiz.id);
@@ -793,7 +1174,6 @@ function confirmExitQuiz() {
     quizTimer = null;
     timeRemaining = 0;
     totalTime = 0;
-    quizActive = false;
     // Exibir dashboard principal
     showDashboard();
 }
@@ -885,22 +1265,22 @@ function getAuthErrorMessage(error) {
 
     const errorCode = typeof error === 'string' ? error : error.code;
     const messages = {
-        'auth/invalid-email': 'E-mail invalido.',
+        'auth/invalid-email': 'E-mail inválido.',
         'auth/user-disabled': 'Esta conta foi desativada.',
         'auth/user-not-found': 'Nenhuma conta encontrada com este e-mail.',
         'auth/wrong-password': 'Senha incorreta.',
-        'auth/invalid-credential': 'E-mail ou senha invalidos.',
+        'auth/invalid-credential': 'E-mail ou senha inválidos.',
         'auth/email-already-in-use': 'Este e-mail ja esta em uso.',
         'auth/weak-password': 'A senha deve ter pelo menos 6 caracteres.',
-        'auth/operation-not-allowed': 'Metodo de login nao habilitado no Firebase Authentication.',
-        'auth/unauthorized-domain': 'Dominio nao autorizado no Firebase Authentication.',
+        'auth/operation-not-allowed': 'Método de login não habilitado no Firebase Authentication.',
+        'auth/unauthorized-domain': 'Domínio não autorizado no Firebase Authentication.',
         'auth/popup-blocked': 'O popup do Google foi bloqueado. Autorize popups ou tente novamente.',
         'auth/popup-closed-by-user': 'Login com Google cancelado.',
         'auth/cancelled-popup-request': 'Ja existe uma tentativa de login com Google em andamento.',
         'auth/account-exists-with-different-credential': 'Ja existe uma conta com este e-mail usando outro metodo de login.',
         'auth/network-request-failed': 'Erro de rede. Verifique sua conexao e tente novamente.',
-        'permission-denied': 'Login autenticado, mas sem permissao para acessar os dados do usuario no Firestore.',
-        'unavailable': 'Servico temporariamente indisponivel. Tente novamente em instantes.'
+        'permission-denied': 'Login autenticado, mas sem permissão para acessar os dados do usuário no Firestore.',
+        'unavailable': 'Serviço temporariamente indisponível. Tente novamente em instantes.'
     };
 
     if (errorCode && messages[errorCode]) return messages[errorCode];
@@ -920,7 +1300,7 @@ function normalizeAuthUserData(user, data = {}) {
 
 function ensureUserDocument(user) {
     if (!user || !user.uid) {
-        return Promise.reject(new Error('Usuario autenticado invalido.'));
+        return Promise.reject(new Error('Usuário autenticado inválido.'));
     }
 
     const userRef = db.collection('users').doc(user.uid);
@@ -1011,7 +1391,7 @@ function registerUser(name, email, password, userType) {
             }, 1200);
         })
         .catch(error => {
-            console.error('Erro ao registrar usuario:', error);
+            console.error('Erro ao registrar usuário:', error);
             hideLoading();
             showError('register-error', getAuthErrorMessage(error));
         });
@@ -1061,7 +1441,7 @@ function invokeIfAvailable(functionName, ...args) {
         return fn(...args);
     }
 
-    console.warn(`Funcao indisponivel: ${functionName}`);
+    console.warn(`Função indisponível: ${functionName}`);
     return null;
 }
 
@@ -1096,6 +1476,7 @@ function initEventListeners() {
     safeOn('create-room-btn', 'click', () => invokeIfAvailable('openRoomModal'));
     safeOn('admin-create-room-btn', 'click', () => invokeIfAvailable('openRoomModal'));
     safeOn('teacher-create-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
+    safeOn('teacher-create-question-btn', 'click', () => invokeIfAvailable('openQuestionModal'));
     safeOn('admin-create-room-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
     safeOn('create-student-btn', 'click', () => invokeIfAvailable('openTeacherUserModal'));
     safeOn('exit-quiz-btn', 'click', confirmExitQuiz);
@@ -1161,6 +1542,10 @@ function initTabNavigation() {
         switchTeacherTab('teacher-quizzes-tab', 'teacher-quizzes-section');
         invokeIfAvailable('loadTeacherQuizzes');
     });
+    safeOn('teacher-questions-tab', 'click', () => {
+        switchTeacherTab('teacher-questions-tab', 'teacher-questions-section');
+        invokeIfAvailable('loadTeacherQuestions');
+    });
     safeOn('teacher-users-tab', 'click', () => {
         switchTeacherTab('teacher-users-tab', 'teacher-users-section');
         invokeIfAvailable('loadTeacherUsers');
@@ -1181,6 +1566,10 @@ function initTabNavigation() {
 }
 
 function initQuizControls() {
+    document.querySelectorAll('#options-container .option').forEach(option => {
+        option.addEventListener('click', () => selectAnswer(option.dataset.value));
+    });
+
     safeOn('prev-question', 'click', () => {
         if (currentQuestionIndex > 0) {
             currentQuestionIndex--;
@@ -1384,7 +1773,7 @@ function createManagedAuthUser(email, password) {
 
 function createManagedUser({ name, email, password, userType, status = 'active', roomIds = [] }) {
     if (!password || password.length < 6) {
-        return Promise.reject(new Error('Informe uma senha temporaria com pelo menos 6 caracteres.'));
+        return Promise.reject(new Error('Informe uma senha temporária com pelo menos 6 caracteres.'));
     }
 
     return createManagedAuthUser(email, password).then(authUser => {
@@ -1463,7 +1852,7 @@ function loadInitialDashboardData() {
 
     if (currentUser.userType === 'aluno') {
         setText('student-name', currentUser.name || currentUser.email || '');
-        loadQuizzes();
+        loadQuizzes().then(() => attemptStartQuizFromLink());
         return;
     }
 
@@ -1510,7 +1899,7 @@ function toggleAccountMenu(role, event) {
 
 function openCurrentUserProfile() {
     closeAccountMenus();
-    if (!currentUser || !currentUser.uid) return alert('Usuario autenticado invalido.');
+    if (!currentUser || !currentUser.uid) return alert('Usuário autenticado inválido.');
 
     if (isAdminUser()) {
         return openUserModal(currentUser.uid, { profileMode: true });
@@ -1633,7 +2022,7 @@ function openRoomModal(roomId = null) {
 
     const loadRoom = roomId
         ? db.collection('rooms').doc(roomId).get().then(doc => {
-            if (!doc.exists) throw new Error('Sala nao encontrada.');
+            if (!doc.exists) throw new Error('Sala não encontrada.');
             const room = doc.data();
             setValue('room-name', room.name);
             setValue('room-description', room.description || '');
@@ -1680,15 +2069,11 @@ function saveRoom() {
 }
 
 function roomVisibleForCurrentUser(room) {
-    return isAdminUser() || room.teacherId === currentUser.uid || room.ownerId === currentUser.uid;
+    return currentUser && (room.teacherId === currentUser.uid || room.ownerId === currentUser.uid);
 }
 
 function getManagedRooms() {
-    if (isAdminUser()) {
-        return fetchCollection('rooms').then(rooms => firebaseOrderByCreatedDesc(rooms));
-    }
-
-    if (isTeacherUser()) {
+    if (canManageTeacherResources()) {
         return fetchManagedRoomsForTeacher().then(rooms => firebaseOrderByCreatedDesc(rooms.filter(roomVisibleForCurrentUser)));
     }
 
@@ -1707,9 +2092,9 @@ function renderRooms(listId, rooms) {
                 <span class="card-badge ${room.status === 'active' ? '' : 'card-badge-secondary'}">${room.status === 'active' ? 'Ativa' : 'Inativa'}</span>
             </div>
             <div class="card-content">
-                <p>${escapeHtml(room.description || 'Sem descricao')}</p>
+                <p>${escapeHtml(room.description || 'Sem descrição')}</p>
                 <p><strong>Alunos:</strong> ${(room.studentIds || []).length}</p>
-                <p><strong>Responsavel:</strong> ${escapeHtml(room.teacherName || room.ownerName || 'N/A')}</p>
+                <p><strong>Responsável:</strong> ${escapeHtml(room.teacherName || room.ownerName || 'N/A')}</p>
                 <p><strong>Criada em:</strong> ${formatDate(room.createdAt)}</p>
             </div>
             <div class="card-actions">
@@ -1750,7 +2135,7 @@ function deleteRoom(roomId) {
     if (!confirm('Tem certeza que deseja excluir esta sala?')) return;
     db.collection('rooms').doc(roomId).delete()
         .then(() => {
-            alert('Sala excluida com sucesso!');
+            alert('Sala excluída com sucesso!');
             isAdminUser() ? loadAdminRooms() : loadTeacherRooms();
         })
         .catch(error => alert('Erro ao excluir sala: ' + getAuthErrorMessage(error)));
@@ -1777,7 +2162,7 @@ function openTeacherQuizModal(quizId = null) {
 
             if (!quizId) return null;
             return db.collection('quizzes').doc(quizId).get().then(doc => {
-                if (!doc.exists) throw new Error('Quiz nao encontrado.');
+                if (!doc.exists) throw new Error('Quiz não encontrado.');
                 const quiz = doc.data();
                 setValue('teacher-quiz-title', quiz.title);
                 setValue('teacher-quiz-description', quiz.description || '');
@@ -1807,7 +2192,7 @@ function saveTeacherQuiz() {
     const time = Number(getValue('teacher-quiz-time'));
 
     if (!title || !category || !roomId || !questionsCount || !time) {
-        return alert('Preencha titulo, categoria, sala, numero de questoes e tempo.');
+        return alert('Preencha título, categoria, sala, número de questões e tempo.');
     }
 
     const quizData = {
@@ -1836,7 +2221,11 @@ function saveTeacherQuiz() {
 }
 
 function quizVisibleForCurrentTeacher(quiz, roomIds = []) {
-    return isAdminUser() || quiz.teacherId === currentUser.uid || quiz.ownerId === currentUser.uid || (quiz.roomId && roomIds.includes(quiz.roomId));
+    if (!currentUser || !quiz) return false;
+    const isOwnQuiz = quiz.teacherId === currentUser.uid || quiz.ownerId === currentUser.uid;
+    const isOwnRoomQuiz = quiz.roomId && roomIds.includes(quiz.roomId);
+    if (quiz.visibility === 'room' || quiz.roomId) return isOwnQuiz || isOwnRoomQuiz;
+    return isAdminUser();
 }
 
 function renderTeacherQuizzes(listId, quizzes, rooms = []) {
@@ -1852,20 +2241,22 @@ function renderTeacherQuizzes(listId, quizzes, rooms = []) {
                 <span class="card-badge ${quiz.status === 'active' ? '' : 'card-badge-secondary'}">${quiz.status === 'active' ? 'Ativo' : 'Inativo'}</span>
             </div>
             <div class="card-content">
-                <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
+                <p>${escapeHtml(quiz.description || 'Sem descrição')}</p>
                 <p><strong>Categoria:</strong> ${escapeHtml(quiz.category || 'Geral')}</p>
                 <p><strong>Sala:</strong> ${escapeHtml(roomsMap[quiz.roomId]?.name || 'Sem sala')}</p>
-                <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                <p><strong>Questões:</strong> ${quiz.questionsCount || 0}</p>
                 <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
             </div>
             <div class="card-actions">
                 <button class="btn btn-primary teacher-quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                <button class="btn btn-secondary teacher-quiz-link" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-link"></i><span class="btn-text">Link</span></button>
                 <button class="btn btn-danger teacher-quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
             </div>
         </div>
     `).join('');
 
     addClickHandler(`#${listId} .teacher-quiz-edit`, event => openTeacherQuizModal(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .teacher-quiz-link`, event => copyQuizLink(event.currentTarget.dataset.id));
     addClickHandler(`#${listId} .teacher-quiz-delete`, event => deleteQuiz(event.currentTarget.dataset.id, () => {
         isAdminUser() ? loadAdminQuizzes() : loadTeacherQuizzes();
     }));
@@ -1891,7 +2282,7 @@ function openTeacherUserModal(userId = null, options = {}) {
     editingTeacherUserId = userId;
     editingTeacherTargetUserType = 'aluno';
     const profileMode = Boolean(options.profileMode);
-    setText('teacher-user-modal-title', profileMode ? 'Editar Perfil' : userId ? 'Editar Usuario' : 'Cadastrar Aluno');
+    setText('teacher-user-modal-title', profileMode ? 'Editar Perfil' : userId ? 'Editar Usuário' : 'Cadastrar Aluno');
     ['teacher-user-name', 'teacher-user-email', 'teacher-user-password'].forEach(id => setValue(id, ''));
     setValue('teacher-user-status', 'active');
 
@@ -1903,7 +2294,7 @@ function openTeacherUserModal(userId = null, options = {}) {
         if (userDoc && userDoc.exists) {
             const user = userDoc.data();
             if (isTeacherUser() && userId !== currentUser.uid && user.userType !== 'aluno') {
-                throw new Error('Acesso negado a este usuario.');
+                throw new Error('Acesso negado a este usuário.');
             }
 
             editingTeacherTargetUserType = user.userType || 'aluno';
@@ -1918,7 +2309,7 @@ function openTeacherUserModal(userId = null, options = {}) {
         const roomList = document.getElementById('teacher-user-rooms-list');
         const isOwnProfile = isTeacherUser() && userId === currentUser.uid;
         roomList.innerHTML = isOwnProfile
-            ? '<p>Seu usuario de professor nao e vinculado a salas como aluno.</p>'
+            ? '<p>Seu usuário de professor não é vinculado a salas como aluno.</p>'
             : rooms.length
             ? rooms.map(room => `
                 <label class="checkbox-row" style="margin-bottom: 0.5rem;">
@@ -1978,7 +2369,7 @@ function saveTeacherUser() {
             }
             alert(isOwnProfile ? 'Cadastro atualizado com sucesso!' : 'Aluno atualizado com sucesso!');
             finish();
-        }).catch(error => alert('Erro ao atualizar usuario: ' + getAuthErrorMessage(error)));
+        }).catch(error => alert('Erro ao atualizar usuário: ' + getAuthErrorMessage(error)));
         return;
     }
 
@@ -2006,7 +2397,7 @@ function loadTeacherUsers() {
 function renderUsers(listId, users, options = {}) {
     const list = document.getElementById(listId);
     if (!list) return;
-    if (!users.length) return setListEmpty(listId, 'Nenhum usuario encontrado.');
+    if (!users.length) return setListEmpty(listId, 'Nenhum usuário encontrado.');
     const allowDelete = options.allowDelete !== false;
 
     list.innerHTML = users.map(user => `
@@ -2037,15 +2428,15 @@ function renderUsers(listId, users, options = {}) {
 }
 
 function loadAdminUsers() {
-    setListLoading('admin-users-list', 'Carregando usuarios...');
+    setListLoading('admin-users-list', 'Carregando usuários...');
     return fetchCollection('users')
         .then(users => {
             adminUsersCache = users.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR'));
             filterAdminUsers(document.getElementById('admin-users-search')?.value || '');
         })
         .catch(error => {
-            console.error('Erro ao carregar usuarios:', error);
-            setListEmpty('admin-users-list', 'Erro ao carregar usuarios.');
+            console.error('Erro ao carregar usuários:', error);
+            setListEmpty('admin-users-list', 'Erro ao carregar usuários.');
         });
 }
 
@@ -2058,10 +2449,10 @@ function filterAdminUsers(query) {
 }
 
 function openUserModal(userId = null, options = {}) {
-    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuarios.');
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuários.');
     editingUserId = userId;
     editingUserProfileMode = Boolean(options.profileMode);
-    setText('user-modal-title', editingUserProfileMode ? 'Editar Perfil' : userId ? 'Editar Usuario' : 'Criar Usuario');
+    setText('user-modal-title', editingUserProfileMode ? 'Editar Perfil' : userId ? 'Editar Usuário' : 'Criar Usuário');
     ['user-name', 'user-email', 'user-password'].forEach(id => setValue(id, ''));
     setValue('user-type', 'aluno');
     setValue('user-status', 'active');
@@ -2073,14 +2464,14 @@ function openUserModal(userId = null, options = {}) {
     }
 
     return db.collection('users').doc(userId).get().then(doc => {
-        if (!doc.exists) throw new Error('Usuario nao encontrado.');
+        if (!doc.exists) throw new Error('Usuário não encontrado.');
         const user = doc.data();
         setValue('user-name', user.name || '');
         setValue('user-email', user.email || '');
         setValue('user-type', user.userType || 'aluno');
         setValue('user-status', user.status || 'active');
         document.getElementById('user-modal').classList.remove('hidden');
-    }).catch(error => alert('Erro ao abrir usuario: ' + getAuthErrorMessage(error)));
+    }).catch(error => alert('Erro ao abrir usuário: ' + getAuthErrorMessage(error)));
 }
 
 function closeUserModal() {
@@ -2090,7 +2481,7 @@ function closeUserModal() {
 }
 
 function saveUser() {
-    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuarios.');
+    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar usuários.');
     const name = getValue('user-name');
     const email = getValue('user-email');
     const password = getValue('user-password');
@@ -2111,20 +2502,20 @@ function saveUser() {
                 currentUser = { ...currentUser, name, email, userType, status };
                 setText('admin-name', name || email);
             }
-            alert(editingUserProfileMode ? 'Perfil atualizado com sucesso!' : 'Usuario atualizado com sucesso!');
+            alert(editingUserProfileMode ? 'Perfil atualizado com sucesso!' : 'Usuário atualizado com sucesso!');
             closeUserModal();
             loadAdminUsers();
-        }).catch(error => alert('Erro ao atualizar usuario: ' + getAuthErrorMessage(error)));
+        }).catch(error => alert('Erro ao atualizar usuário: ' + getAuthErrorMessage(error)));
         return;
     }
 
     createManagedUser({ name, email, password, userType, status })
         .then(() => {
-            alert('Usuario criado com sucesso!');
+            alert('Usuário criado com sucesso!');
             closeUserModal();
             loadAdminUsers();
         })
-        .catch(error => alert('Erro ao criar usuario: ' + getAuthErrorMessage(error)));
+        .catch(error => alert('Erro ao criar usuário: ' + getAuthErrorMessage(error)));
 }
 
 function toggleUserStatus(userId, status) {
@@ -2138,14 +2529,14 @@ function toggleUserStatus(userId, status) {
 }
 
 function deleteUser(userId) {
-    if (!isAdminUser()) return alert('Apenas administradores podem excluir usuarios.');
-    if (!confirm('Tem certeza que deseja excluir este usuario do Firestore?')) return;
+    if (!isAdminUser()) return alert('Apenas administradores podem excluir usuários.');
+    if (!confirm('Tem certeza que deseja excluir este usuário do Firestore?')) return;
     db.collection('users').doc(userId).delete()
         .then(() => {
-            alert('Usuario excluido com sucesso!');
+            alert('Usuário excluído com sucesso!');
             isAdminUser() ? loadAdminUsers() : loadTeacherUsers();
         })
-        .catch(error => alert('Erro ao excluir usuario: ' + getAuthErrorMessage(error)));
+        .catch(error => alert('Erro ao excluir usuário: ' + getAuthErrorMessage(error)));
 }
 
 function openQuizModal(quizId = null) {
@@ -2163,7 +2554,7 @@ function openQuizModal(quizId = null) {
     populateCategorySelect('quiz-category').then(() => {
         if (!quizId) return null;
         return db.collection('quizzes').doc(quizId).get().then(doc => {
-            if (!doc.exists) throw new Error('Quiz nao encontrado.');
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
             const quiz = doc.data();
             setValue('quiz-title', quiz.title);
             setValue('quiz-description', quiz.description || '');
@@ -2214,7 +2605,7 @@ function saveQuiz() {
     };
 
     if (!quizData.title || !quizData.category || !quizData.questionsCount || !quizData.time) {
-        return alert('Preencha titulo, categoria, numero de questoes e tempo.');
+        return alert('Preencha título, categoria, número de questões e tempo.');
     }
     if (visibility === 'specific' && selectedIds.length === 0) {
         return alert('Selecione pelo menos um aluno.');
@@ -2239,13 +2630,13 @@ function renderAdminQuizzes(quizzes) {
     list.innerHTML = quizzes.map(quiz => `
         <div class="card">
             <div class="card-header">
-                <h3 class="card-title">${escapeHtml(quiz.title || 'Sem titulo')}</h3>
+                <h3 class="card-title">${escapeHtml(quiz.title || 'Sem título')}</h3>
                 <span class="card-badge ${quiz.status === 'active' ? '' : 'card-badge-secondary'}">${quiz.status === 'active' ? 'Ativo' : 'Inativo'}</span>
             </div>
             <div class="card-content">
-                <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
+                <p>${escapeHtml(quiz.description || 'Sem descrição')}</p>
                 <p><strong>Categoria:</strong> ${escapeHtml(quiz.category || 'Geral')}</p>
-                <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                <p><strong>Questões:</strong> ${quiz.questionsCount || 0}</p>
                 <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
                 <p><strong>Visibilidade:</strong> ${escapeHtml(quiz.visibility || 'all')}</p>
             </div>
@@ -2266,8 +2657,12 @@ function renderAdminQuizzes(quizzes) {
 
 function loadAdminQuizzes() {
     setListLoading('admin-quizzes-list', 'Carregando quizzes...');
-    return fetchCollection('quizzes')
-        .then(quizzes => renderAdminQuizzes(firebaseOrderByCreatedDesc(quizzes)))
+    return Promise.all([fetchCollection('quizzes'), getManagedRooms()])
+        .then(([quizzes, rooms]) => {
+            const roomIds = rooms.map(room => room.id);
+            const visible = quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds));
+            renderAdminQuizzes(firebaseOrderByCreatedDesc(visible));
+        })
         .catch(error => {
             console.error('Erro ao carregar quizzes:', error);
             setListEmpty('admin-quizzes-list', 'Erro ao carregar quizzes.');
@@ -2278,27 +2673,55 @@ function deleteQuiz(quizId, onDone = loadAdminQuizzes) {
     if (!confirm('Tem certeza que deseja excluir este quiz?')) return;
     db.collection('quizzes').doc(quizId).delete()
         .then(() => {
-            alert('Quiz excluido com sucesso!');
+            alert('Quiz excluído com sucesso!');
             onDone();
         })
         .catch(error => alert('Erro ao excluir quiz: ' + getAuthErrorMessage(error)));
 }
 
+function canManageQuestions() {
+    return isAdminUser() || isTeacherUser();
+}
+
+function questionOwnedByCurrentUser(question) {
+    return Boolean(currentUser && question && (
+        question.ownerId === currentUser.uid ||
+        question.teacherId === currentUser.uid
+    ));
+}
+
+function canEditQuestion(question) {
+    return isAdminUser() || (isTeacherUser() && questionOwnedByCurrentUser(question));
+}
+
+function canDeleteQuestion(question) {
+    return isAdminUser() || (isTeacherUser() && questionOwnedByCurrentUser(question));
+}
+
+function refreshQuestionsLists() {
+    if (isAdminUser()) return loadAdminQuestions();
+    if (isTeacherUser()) return loadTeacherQuestions();
+    return Promise.resolve();
+}
+
 function openQuestionModal(questionId = null) {
-    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar questoes.');
+    if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
     editingQuestionId = questionId;
-    setText('question-modal-title', questionId ? 'Editar Questao' : 'Adicionar Nova Questao');
+    setText('question-modal-title', questionId ? 'Editar Questão' : 'Adicionar Nova Questão');
     ['question-text', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
     setValue('correct-answer', 'a');
 
     if (!questionId) {
         document.getElementById('question-modal').classList.remove('hidden');
-        return;
+        return Promise.resolve();
     }
 
-    db.collection('questions').doc(questionId).get().then(doc => {
-        if (!doc.exists) throw new Error('Questao nao encontrada.');
-        const question = doc.data();
+    return db.collection('questions').doc(questionId).get().then(doc => {
+        if (!doc.exists) throw new Error('Questão não encontrada.');
+        const question = { id: doc.id, ...doc.data() };
+        if (!canEditQuestion(question)) {
+            throw new Error('Você só pode editar questões criadas por você.');
+        }
         setValue('question-text', question.text || '');
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
@@ -2307,7 +2730,7 @@ function openQuestionModal(questionId = null) {
         setValue('option-d', question.options?.d || '');
         setValue('correct-answer', question.correctAnswer || 'a');
         document.getElementById('question-modal').classList.remove('hidden');
-    }).catch(error => alert('Erro ao abrir questao: ' + getAuthErrorMessage(error)));
+    }).catch(error => alert('Erro ao abrir questão: ' + getAuthErrorMessage(error)));
 }
 
 function closeQuestionModal() {
@@ -2316,7 +2739,7 @@ function closeQuestionModal() {
 }
 
 function saveQuestion() {
-    if (!isAdminUser()) return alert('Apenas administradores podem gerenciar questoes.');
+    if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
     const data = {
         text: getValue('question-text'),
         category: getValue('question-category') || 'Geral',
@@ -2335,20 +2758,38 @@ function saveQuestion() {
     }
 
     const request = editingQuestionId
-        ? db.collection('questions').doc(editingQuestionId).set(data, { merge: true })
-        : db.collection('questions').add({ ...data, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        ? db.collection('questions').doc(editingQuestionId).get().then(doc => {
+            if (!doc.exists) throw new Error('Questão não encontrada.');
+            const question = { id: doc.id, ...doc.data() };
+            if (!canEditQuestion(question)) {
+                throw new Error('Você só pode editar questões criadas por você.');
+            }
+            return db.collection('questions').doc(editingQuestionId).set(data, { merge: true });
+        })
+        : db.collection('questions').add({
+            ...data,
+            ...getOwnerPayload(),
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
 
     request.then(() => {
-        alert('Questao salva com sucesso!');
+        alert('Questão salva com sucesso!');
         closeQuestionModal();
-        loadAdminQuestions();
-    }).catch(error => alert('Erro ao salvar questao: ' + getAuthErrorMessage(error)));
+        refreshQuestionsLists();
+    }).catch(error => alert('Erro ao salvar questão: ' + getAuthErrorMessage(error)));
 }
 
-function renderQuestions(questions) {
-    const list = document.getElementById('admin-questions-list');
+function getQuestionOwnerLabel(question) {
+    if (question.ownerName || question.teacherName) return question.ownerName || question.teacherName;
+    if (question.ownerType === 'admin') return 'Administrador';
+    if (question.ownerType === 'professor') return 'Professor';
+    return 'Não informado';
+}
+
+function renderQuestions(listId, questions) {
+    const list = document.getElementById(listId);
     if (!list) return;
-    if (!questions.length) return setListEmpty('admin-questions-list', 'Nenhuma questao cadastrada.');
+    if (!questions.length) return setListEmpty(listId, 'Nenhuma questão cadastrada.');
 
     list.innerHTML = questions.map(question => `
         <div class="card question-card">
@@ -2362,36 +2803,56 @@ function renderQuestions(questions) {
                 <p><strong>C:</strong> ${escapeHtml(question.options?.c || '')}</p>
                 <p><strong>D:</strong> ${escapeHtml(question.options?.d || '')}</p>
                 <p><strong>Resposta:</strong> ${(question.correctAnswer || '').toUpperCase()}</p>
+                <p><strong>Criada por:</strong> ${escapeHtml(getQuestionOwnerLabel(question))}</p>
             </div>
             <div class="card-actions">
-                <button class="btn btn-primary question-edit" data-id="${escapeHtml(question.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
-                <button class="btn btn-danger question-delete" data-id="${escapeHtml(question.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+                ${canEditQuestion(question) ? `<button class="btn btn-primary question-edit" data-id="${escapeHtml(question.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>` : ''}
+                ${canDeleteQuestion(question) ? `<button class="btn btn-danger question-delete" data-id="${escapeHtml(question.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
             </div>
         </div>
     `).join('');
 
-    addClickHandler('#admin-questions-list .question-edit', event => openQuestionModal(event.currentTarget.dataset.id));
-    addClickHandler('#admin-questions-list .question-delete', event => deleteQuestion(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .question-edit`, event => openQuestionModal(event.currentTarget.dataset.id));
+    addClickHandler(`#${listId} .question-delete`, event => deleteQuestion(event.currentTarget.dataset.id));
 }
 
 function loadAdminQuestions() {
-    setListLoading('admin-questions-list', 'Carregando questoes...');
+    setListLoading('admin-questions-list', 'Carregando questões...');
     return fetchCollection('questions')
-        .then(questions => renderQuestions(firebaseOrderByCreatedDesc(questions)))
+        .then(questions => renderQuestions('admin-questions-list', firebaseOrderByCreatedDesc(questions)))
         .catch(error => {
-            console.error('Erro ao carregar questoes:', error);
-            setListEmpty('admin-questions-list', 'Erro ao carregar questoes.');
+            console.error('Erro ao carregar questões:', error);
+            setListEmpty('admin-questions-list', 'Erro ao carregar questões.');
+        });
+}
+
+function loadTeacherQuestions() {
+    setListLoading('teacher-questions-list', 'Carregando questões...');
+    return fetchCollection('questions')
+        .then(questions => renderQuestions('teacher-questions-list', firebaseOrderByCreatedDesc(questions)))
+        .catch(error => {
+            console.error('Erro ao carregar questões do professor:', error);
+            setListEmpty('teacher-questions-list', 'Erro ao carregar questões.');
         });
 }
 
 function deleteQuestion(questionId) {
-    if (!confirm('Tem certeza que deseja excluir esta questao?')) return;
-    db.collection('questions').doc(questionId).delete()
-        .then(() => {
-            alert('Questao excluida com sucesso!');
-            loadAdminQuestions();
+    return db.collection('questions').doc(questionId).get()
+        .then(doc => {
+            if (!doc.exists) throw new Error('Questão não encontrada.');
+            const question = { id: doc.id, ...doc.data() };
+            if (!canDeleteQuestion(question)) {
+                throw new Error('Você só pode excluir questões criadas por você.');
+            }
+            if (!confirm('Tem certeza que deseja excluir esta questão?')) return false;
+            return db.collection('questions').doc(questionId).delete();
         })
-        .catch(error => alert('Erro ao excluir questao: ' + getAuthErrorMessage(error)));
+        .then(deleted => {
+            if (deleted === false) return;
+            alert('Questão excluída com sucesso!');
+            refreshQuestionsLists();
+        })
+        .catch(error => alert('Erro ao excluir questão: ' + getAuthErrorMessage(error)));
 }
 
 function openImportModal() {
@@ -2403,13 +2864,14 @@ function closeImportModal() {
 }
 
 function importQuestions() {
+    if (!isAdminUser()) return alert('Apenas administradores podem importar questões em lote.');
     let questions;
     try {
         questions = JSON.parse(document.getElementById('json-data').value);
     } catch (error) {
-        return alert('JSON invalido.');
+        return alert('JSON inválido.');
     }
-    if (!Array.isArray(questions) || questions.length === 0) return alert('Informe um array de questoes.');
+    if (!Array.isArray(questions) || questions.length === 0) return alert('Informe um array de questões.');
 
     const batch = db.batch();
     questions.forEach(question => {
@@ -2419,16 +2881,17 @@ function importQuestions() {
             category: question.category || 'Geral',
             options: question.options || {},
             correctAnswer: question.correctAnswer || 'a',
+            ...getOwnerPayload(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp(),
             updatedAt: firebase.firestore.FieldValue.serverTimestamp()
         });
     });
 
     batch.commit().then(() => {
-        alert('Questoes importadas com sucesso!');
+        alert('Questões importadas com sucesso!');
         closeImportModal();
         loadAdminQuestions();
-    }).catch(error => alert('Erro ao importar questoes: ' + getAuthErrorMessage(error)));
+    }).catch(error => alert('Erro ao importar questões: ' + getAuthErrorMessage(error)));
 }
 
 function loadQuizzes() {
@@ -2445,13 +2908,13 @@ function loadQuizzes() {
                 return !quiz.visibility || quiz.visibility === 'all';
             });
 
-            if (!visible.length) return setListEmpty('quizzes-list', 'Nenhum quiz disponivel.');
+            if (!visible.length) return setListEmpty('quizzes-list', 'Nenhum quiz disponível.');
             list.innerHTML = firebaseOrderByCreatedDesc(visible).map(quiz => `
                 <div class="card">
                     <div class="card-header"><h3 class="card-title">${escapeHtml(quiz.title)}</h3><span class="card-badge">${escapeHtml(quiz.category || 'Geral')}</span></div>
                     <div class="card-content">
-                        <p>${escapeHtml(quiz.description || 'Sem descricao')}</p>
-                        <p><strong>Questoes:</strong> ${quiz.questionsCount || 0}</p>
+                        <p>${escapeHtml(quiz.description || 'Sem descrição')}</p>
+                        <p><strong>Questões:</strong> ${quiz.questionsCount || 0}</p>
                         <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
                     </div>
                     <div class="card-actions">
@@ -2459,7 +2922,7 @@ function loadQuizzes() {
                     </div>
                 </div>
             `).join('');
-            addClickHandler('#quizzes-list .quiz-start', event => alert('Fluxo de realizacao do quiz ainda precisa ser reconectado a partir do backup completo.'));
+            addClickHandler('#quizzes-list .quiz-start', event => startQuiz(event.currentTarget.dataset.id));
         })
         .catch(error => {
             console.error('Erro ao carregar quizzes:', error);
@@ -2522,7 +2985,7 @@ function renderRankingList(listId, results, users) {
         <div class="ranking-item">
             <div class="ranking-position">${index + 1}</div>
             <div class="ranking-info">
-                <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuario')}</div>
+                <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuário')}</div>
                 <div class="ranking-details">${item.totalQuizzes} quiz(es)</div>
             </div>
             <div class="ranking-score">${item.totalScore} pts</div>
@@ -2531,19 +2994,19 @@ function renderRankingList(listId, results, users) {
 }
 
 function loadQuizRankings() {
-    setListEmpty('quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+    setListEmpty('quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
 }
 
 function loadAdminQuizRankings() {
-    setListEmpty('admin-quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+    setListEmpty('admin-quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
 }
 
 function loadTeacherQuizRankings() {
-    setListEmpty('teacher-quiz-master-list', 'Selecione um quiz para ver o ranking especifico.');
+    setListEmpty('teacher-quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
 }
 
 function loadUserHistory() {
-    setListEmpty('history-list', 'Historico indisponivel nesta versao.');
+    setListEmpty('history-list', 'Histórico indisponível nesta versão.');
 }
 
 function loadAdminReports() {
@@ -2552,7 +3015,7 @@ function loadAdminReports() {
 
 function loadTeacherReports() {
     const containerId = 'teacher-reports-content';
-    const container = setListLoading(containerId, 'Carregando relatorios...');
+    const container = setListLoading(containerId, 'Carregando relatórios...');
     if (!container) return Promise.resolve();
 
     return Promise.all([getManagedRooms(), fetchUsersByType('aluno'), fetchCollection('quizzes'), fetchCollection('questions')])
@@ -2564,30 +3027,30 @@ function loadTeacherReports() {
                 <div class="card"><div class="card-content"><h3>${visibleStudents.length}</h3><p>Alunos</p></div></div>
                 <div class="card"><div class="card-content"><h3>${rooms.length}</h3><p>Salas</p></div></div>
                 <div class="card"><div class="card-content"><h3>${visibleQuizzes.length}</h3><p>Quizzes</p></div></div>
-                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questoes</p></div></div>
+                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questões</p></div></div>
             `;
         })
         .catch(error => {
-            console.error('Erro ao carregar relatorios do professor:', error);
-            setListEmpty(containerId, 'Erro ao carregar relatorios.');
+            console.error('Erro ao carregar relatórios do professor:', error);
+            setListEmpty(containerId, 'Erro ao carregar relatórios.');
         });
 }
 
 function loadReports(containerId) {
-    const container = setListLoading(containerId, 'Carregando relatorios...');
+    const container = setListLoading(containerId, 'Carregando relatórios...');
     if (!container) return Promise.resolve();
-    return Promise.all([fetchCollection('users'), fetchCollection('rooms'), fetchCollection('quizzes'), fetchCollection('questions')])
+    return Promise.all([fetchCollection('users'), getManagedRooms(), fetchCollection('quizzes'), fetchCollection('questions')])
         .then(([users, rooms, quizzes, questions]) => {
             container.innerHTML = `
-                <div class="card"><div class="card-content"><h3>${users.length}</h3><p>Usuarios</p></div></div>
+                <div class="card"><div class="card-content"><h3>${users.length}</h3><p>Usuários</p></div></div>
                 <div class="card"><div class="card-content"><h3>${rooms.length}</h3><p>Salas</p></div></div>
                 <div class="card"><div class="card-content"><h3>${quizzes.length}</h3><p>Quizzes</p></div></div>
-                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questoes</p></div></div>
+                <div class="card"><div class="card-content"><h3>${questions.length}</h3><p>Questões</p></div></div>
             `;
         })
         .catch(error => {
-            console.error('Erro ao carregar relatorios:', error);
-            setListEmpty(containerId, 'Erro ao carregar relatorios.');
+            console.error('Erro ao carregar relatórios:', error);
+            setListEmpty(containerId, 'Erro ao carregar relatórios.');
         });
 }
 
@@ -2613,6 +3076,7 @@ window.openQuizModal = openQuizModal;
 window.closeQuizModal = closeQuizModal;
 window.saveQuiz = saveQuiz;
 window.loadAdminQuestions = loadAdminQuestions;
+window.loadTeacherQuestions = loadTeacherQuestions;
 window.openQuestionModal = openQuestionModal;
 window.closeQuestionModal = closeQuestionModal;
 window.saveQuestion = saveQuestion;
@@ -2620,6 +3084,13 @@ window.openImportModal = openImportModal;
 window.closeImportModal = closeImportModal;
 window.importQuestions = importQuestions;
 window.loadQuizzes = loadQuizzes;
+window.startQuiz = startQuiz;
+window.loadQuizQuestions = loadQuizQuestions;
+window.displayQuestion = displayQuestion;
+window.selectAnswer = selectAnswer;
+window.finishQuiz = finishQuiz;
+window.handleReviewClick = handleReviewClick;
+window.closeReviewModal = closeReviewModal;
 window.loadRanking = loadRanking;
 window.loadAdminRanking = loadAdminRanking;
 window.loadTeacherRanking = loadTeacherRanking;

@@ -72,24 +72,24 @@ service cloud.firestore {
 
     match /rooms/{roomId} {
       allow get, list: if signedIn() && (
-        isAdmin() ||
         ownsExistingResource() ||
-        (resource.data.studentIds is list && request.auth.uid in resource.data.studentIds)
+        request.auth.uid in resource.data.studentIds
       );
 
       allow create: if signedIn() && (
-        isAdmin() ||
-        (isProfessor() && ownsRequestedResource())
+        isAdminOrProfessor() &&
+        ownsRequestedResource()
       );
 
       allow update: if signedIn() && (
-        isAdmin() ||
-        (isProfessor() && ownsExistingResource() && ownsRequestedResource())
+        isAdminOrProfessor() &&
+        ownsExistingResource() &&
+        ownsRequestedResource()
       );
 
       allow delete: if signedIn() && (
-        isAdmin() ||
-        (isProfessor() && ownsExistingResource())
+        isAdminOrProfessor() &&
+        ownsExistingResource()
       );
     }
 
@@ -120,7 +120,25 @@ service cloud.firestore {
 
     match /questions/{questionId} {
       allow read: if signedIn();
-      allow write: if isAdmin();
+
+      allow create: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && ownsRequestedResource())
+      );
+
+      allow update: if signedIn() && (
+        isAdmin() ||
+        (
+          isProfessor() &&
+          ownsExistingResource() &&
+          ownsRequestedResource()
+        )
+      );
+
+      allow delete: if signedIn() && (
+        isAdmin() ||
+        (isProfessor() && ownsExistingResource())
+      );
     }
 
     match /userQuizzes/{userQuizId} {

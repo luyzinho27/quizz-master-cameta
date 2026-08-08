@@ -242,7 +242,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-door-open"></i>
                                     <h3>Salas</h3>
-                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                    <p>Salas ficam visíveis apenas para quem criou e para os alunos vinculados.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-graduate"></i>
@@ -252,12 +252,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-list-alt"></i>
                                     <h3>Quizzes</h3>
-                                    <p>Administradores gerenciam quizzes globais; professores e admins também criam quizzes por sala.</p>
+                                    <p>Quizzes podem ser globais, específicos ou vinculados a salas, com acesso por link direto.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-question-circle"></i>
                                     <h3>Questões</h3>
-                                    <p>Banco de questões categorizadas com cadastro, edição, exclusão e importação por JSON.</p>
+                                    <p>Professores criam e gerenciam suas questões; administradores podem gerenciar todas.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-trophy"></i>
@@ -277,7 +277,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-shield-alt"></i>
                                     <h3>Segurança</h3>
-                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                    <p>Regras do Firestore protegem dados por perfil, criador da sala e autoria das questões.</p>
                                 </div>
                             </div>
                         </div>
@@ -293,12 +293,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-chalkboard-teacher"></i>
                                     <h3>Professor</h3>
-                                    <p>Gerencia salas, quizzes por sala, alunos, relatórios e seu próprio perfil, sem excluir usuários.</p>
+                                    <p>Gerencia suas salas, quizzes por sala, questões próprias, alunos, relatórios e perfil.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-shield"></i>
                                     <h3>Administrador</h3>
-                                    <p>Gerencia usuários, salas, quizzes, questões, importações, rankings, relatórios e novos admins.</p>
+                                    <p>Gerencia usuários, quizzes globais, questões, importações, rankings, relatórios e novos admins.</p>
                                 </div>
                             </div>
                         </div>
@@ -615,7 +615,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-door-open"></i>
                                     <h3>Salas</h3>
-                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                    <p>Salas ficam visíveis apenas para quem criou e para os alunos vinculados.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-graduate"></i>
@@ -625,12 +625,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-list-alt"></i>
                                     <h3>Quizzes</h3>
-                                    <p>Administradores gerenciam quizzes globais; professores e admins também criam quizzes por sala.</p>
+                                    <p>Quizzes podem ser globais, específicos ou vinculados a salas, com acesso por link direto.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-question-circle"></i>
                                     <h3>Questões</h3>
-                                    <p>Banco de questões categorizadas com cadastro, edição, exclusão e importação por JSON.</p>
+                                    <p>Professores criam e gerenciam suas questões; administradores podem gerenciar todas.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-trophy"></i>
@@ -650,7 +650,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-shield-alt"></i>
                                     <h3>Segurança</h3>
-                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                    <p>Regras do Firestore protegem dados por perfil, criador da sala e autoria das questões.</p>
                                 </div>
                             </div>
                         </div>
@@ -666,12 +666,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-chalkboard-teacher"></i>
                                     <h3>Professor</h3>
-                                    <p>Gerencia salas, quizzes por sala, alunos, relatórios e seu próprio perfil, sem excluir usuários.</p>
+                                    <p>Gerencia suas salas, quizzes por sala, questões próprias, alunos, relatórios e perfil.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-shield"></i>
                                     <h3>Administrador</h3>
-                                    <p>Gerencia usuários, salas, quizzes, questões, importações, rankings, relatórios e novos admins.</p>
+                                    <p>Gerencia usuários, quizzes globais, questões, importações, rankings, relatórios e novos admins.</p>
                                 </div>
                             </div>
                         </div>
@@ -795,6 +795,10 @@
                         <i class="fas fa-list-alt"></i>
                         <span class="tab-text">Quizzes</span>
                     </button>
+                    <button id="teacher-questions-tab" class="tab">
+                        <i class="fas fa-question-circle"></i>
+                        <span class="tab-text">Questões</span>
+                    </button>
                     <button id="teacher-users-tab" class="tab">
                         <i class="fas fa-user-graduate"></i>
                         <span class="tab-text">Alunos</span>
@@ -860,6 +864,18 @@
                     </button>
                 </div>
                 <div id="teacher-quizzes-list" class="cards-container"></div>
+            </div>
+
+            <div id="teacher-questions-section" class="section">
+                <div class="section-header">
+                    <h2>Banco de Questões</h2>
+                    <p>Visualize todas as questões e gerencie as que você criou</p>
+                    <button id="teacher-create-question-btn" class="btn btn-primary">
+                        <i class="fas fa-plus"></i>
+                        <span class="btn-text">Adicionar Questão</span>
+                    </button>
+                </div>
+                <div id="teacher-questions-list" class="cards-container"></div>
             </div>
 
             <div id="teacher-users-section" class="section">
@@ -931,7 +947,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-door-open"></i>
                                     <h3>Salas</h3>
-                                    <p>Professores e administradores podem criar, editar, listar e organizar salas com alunos vinculados.</p>
+                                    <p>Salas ficam visíveis apenas para quem criou e para os alunos vinculados.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-graduate"></i>
@@ -941,12 +957,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-list-alt"></i>
                                     <h3>Quizzes</h3>
-                                    <p>Administradores gerenciam quizzes globais; professores e admins também criam quizzes por sala.</p>
+                                    <p>Quizzes podem ser globais, específicos ou vinculados a salas, com acesso por link direto.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-question-circle"></i>
                                     <h3>Questões</h3>
-                                    <p>Banco de questões categorizadas com cadastro, edição, exclusão e importação por JSON.</p>
+                                    <p>Professores criam e gerenciam suas questões; administradores podem gerenciar todas.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-trophy"></i>
@@ -966,7 +982,7 @@
                                 <div class="feature-card">
                                     <i class="fas fa-shield-alt"></i>
                                     <h3>Segurança</h3>
-                                    <p>Regras do Firestore protegem dados por perfil e impedem acesso indevido a professores e admins.</p>
+                                    <p>Regras do Firestore protegem dados por perfil, criador da sala e autoria das questões.</p>
                                 </div>
                             </div>
                         </div>
@@ -982,12 +998,12 @@
                                 <div class="feature-card">
                                     <i class="fas fa-chalkboard-teacher"></i>
                                     <h3>Professor</h3>
-                                    <p>Gerencia salas, quizzes por sala, alunos, relatórios e seu próprio perfil, sem excluir usuários.</p>
+                                    <p>Gerencia suas salas, quizzes por sala, questões próprias, alunos, relatórios e perfil.</p>
                                 </div>
                                 <div class="feature-card">
                                     <i class="fas fa-user-shield"></i>
                                     <h3>Administrador</h3>
-                                    <p>Gerencia usuários, salas, quizzes, questões, importações, rankings, relatórios e novos admins.</p>
+                                    <p>Gerencia usuários, quizzes globais, questões, importações, rankings, relatórios e novos admins.</p>
                                 </div>
                             </div>
                         </div>

@@ -1,84 +1,96 @@
 # QuizMaster - Sistema de Quiz Educacional
 
-O **QuizMaster** e uma aplicacao web educacional para organizar quizzes, turmas, alunos, rankings e relatorios em um ambiente simples para estudantes, professores e administradores.
+O **QuizMaster** é uma aplicação web educacional para organizar salas, alunos, quizzes, questões, rankings e relatórios em um ambiente simples para estudantes, professores e administradores.
 
-O projeto usa Firebase Authentication, Cloud Firestore e Firebase Hosting. A interface e feita com HTML, CSS e JavaScript puro, sem etapa de build.
+O projeto usa Firebase Authentication, Cloud Firestore, Firebase Security Rules e Firebase Hosting. A interface é feita com HTML, CSS e JavaScript puro, sem etapa de build.
 
 ## Funcionalidades Atuais
 
-### Autenticacao e Acesso
+### Autenticação e Acesso
 
 - Login com e-mail e senha.
 - Login com Google.
-- Cadastro publico de alunos e professores.
-- Criacao do primeiro administrador pelo cadastro publico somente quando ainda nao existe admin.
-- Bloqueio do cadastro publico de novos administradores depois que o primeiro admin existe.
-- Criacao de novos administradores somente por um administrador autenticado.
-- Persistencia de sessao no navegador.
-- Mensagens de erro tratadas para os principais problemas de autenticacao.
+- Cadastro público de alunos e professores.
+- Criação do primeiro administrador pelo cadastro público somente quando ainda não existe administrador.
+- Bloqueio do cadastro público de novos administradores depois que o primeiro administrador existe.
+- Criação de novos administradores somente por um administrador autenticado.
+- Persistência de sessão no navegador.
+- Redirecionamento automático por link de quiz após login do aluno.
+- Mensagens de erro tratadas para os principais problemas de autenticação.
 
-### Perfis de Usuario
+### Perfis de Usuário
 
-- **Aluno:** acessa quizzes disponiveis, ranking, ranking por quiz, historico e informacoes da aplicacao.
-- **Professor:** gerencia salas, quizzes por sala, alunos, ranking, relatorios e o proprio perfil.
-- **Administrador:** possui os recursos administrativos e tambem os recursos de professor, incluindo gerenciamento de salas e quizzes por sala.
+- **Aluno:** acessa quizzes disponíveis, realiza tentativas, revisa respostas quando permitido, consulta ranking, ranking por quiz, histórico e informações da aplicação.
+- **Professor:** gerencia suas próprias salas, quizzes por sala, questões criadas por ele, alunos, ranking, relatórios e o próprio perfil.
+- **Administrador:** possui recursos administrativos e também recursos de professor, com gerenciamento de usuários, quizzes globais, questões e relatórios.
 
 ### Alunos
 
-- Visualizacao de quizzes disponiveis conforme visibilidade configurada.
-- Acesso a ranking geral e area de ranking por quiz.
-- Historico reservado para acompanhamento de tentativas.
-- Protecoes visuais durante a realizacao de quiz, incluindo tela de protecao contra captura.
+- Visualização de quizzes disponíveis conforme visibilidade configurada.
+- Acesso a quizzes globais, quizzes específicos e quizzes vinculados às salas em que o aluno foi incluído.
+- Execução de quiz com temporizador, progresso salvo e proteção visual contra cópia/captura.
+- Registro de tentativa em `userQuizzes`, com pontuação, acertos, erros e tempo utilizado.
+- Revisão de respostas quando o quiz permite.
+- Acesso por link direto de quiz: se o aluno já estiver autenticado, entra no quiz; se não estiver, faz login e é redirecionado ao quiz.
 
 ### Professores
 
-- Criacao, edicao, listagem e exclusao de salas proprias.
-- Vinculo de alunos a salas.
-- Criacao e edicao de quizzes vinculados a salas.
-- Listagem de usuarios do tipo Aluno.
-- Cadastro e edicao de alunos, incluindo status e salas vinculadas.
-- Sem permissao de excluir usuarios do sistema.
-- Menu de perfil no cabecalho para editar o proprio cadastro.
-- Acesso a rankings e relatorios relacionados aos alunos, salas e quizzes.
+- Criação, edição, listagem e exclusão apenas das próprias salas.
+- Vinculação de alunos às salas criadas pelo professor.
+- Criação e edição de quizzes vinculados às próprias salas.
+- Geração de link/código de acesso para quizzes por sala.
+- Aba **Questões** para cadastrar, visualizar, editar e excluir questões criadas pelo próprio professor.
+- Visualização de todas as questões disponíveis no banco para uso em quizzes.
+- Listagem de usuários do tipo Aluno.
+- Cadastro e edição de alunos, incluindo status e salas vinculadas.
+- Sem permissão para excluir usuários do sistema.
+- Menu de perfil no cabeçalho para editar o próprio cadastro.
+- Acesso a rankings e relatórios relacionados aos alunos, salas e quizzes sob sua responsabilidade.
 
 ### Administradores
 
-- Gerenciamento de usuarios: alunos, professores e administradores.
-- Cadastro de usuarios sem derrubar a sessao atual do administrador.
-- Edicao de status e dados cadastrais de usuarios.
-- Exclusao de usuarios permitida somente ao administrador.
+- Gerenciamento de usuários: alunos, professores e administradores.
+- Cadastro de usuários sem derrubar a sessão atual do administrador.
+- Edição de status e dados cadastrais de usuários.
+- Exclusão de usuários permitida somente ao administrador.
 - Gerenciamento de quizzes globais.
-- Gerenciamento de quizzes por sala.
-- Gerenciamento de salas.
-- Gerenciamento do banco de questoes.
-- Importacao de questoes por JSON.
-- Relatorios gerais de usuarios, salas, quizzes e questoes.
-- Menu de perfil no cabecalho para editar o proprio cadastro.
+- Gerenciamento de quizzes por sala criados pelo próprio administrador.
+- Gerenciamento das próprias salas.
+- Visualização, edição e exclusão de qualquer questão.
+- Importação de questões por JSON.
+- Relatórios gerais de usuários, quizzes, questões e salas próprias.
+- Menu de perfil no cabeçalho para editar o próprio cadastro.
 
-### Quizzes e Questoes
+### Quizzes e Questões
 
-- Quizzes globais com controle de visibilidade.
-- Quizzes especificos por sala.
-- Controle de titulo, descricao, categoria, quantidade de questoes, tempo, status e revisao.
-- Banco de questoes categorizado.
-- Cadastro, edicao, exclusao e importacao de questoes.
+- Quizzes globais com controle de visibilidade para todos os alunos ou alunos específicos.
+- Quizzes específicos por sala, liberados somente para alunos vinculados à sala.
+- Controle de título, descrição, categoria, quantidade de questões, tempo, status e revisão.
+- Banco de questões categorizado.
+- Questões visíveis para professores e administradores.
+- Professores podem criar, editar e excluir apenas as questões que criaram.
+- Administradores podem editar e excluir qualquer questão.
+- Importação de questões por JSON restrita ao administrador.
 
 ### Salas
 
-- Criacao de turmas/salas.
-- Associacao de alunos as salas.
+- Criação de turmas/salas.
+- Associação de alunos às salas.
 - Status ativo/inativo.
-- Responsavel pela sala identificado por professor ou administrador.
-- Uso das salas para limitar quizzes e relatorios.
+- Responsável pela sala identificado por professor ou administrador.
+- Salas criadas por um professor ficam visíveis somente para o próprio professor e para os alunos vinculados.
+- Salas criadas por um administrador ficam visíveis somente para o próprio administrador e para os alunos vinculados.
+- Outros professores e administradores não visualizam nem gerenciam salas criadas por terceiros.
 
-### Seguranca
+### Segurança
 
 - Regras do Cloud Firestore versionadas em `firestore.rules`.
-- Regras separadas por perfil de usuario.
-- Professores podem ver alunos e o proprio cadastro, mas nao podem ver dados de outros professores ou administradores.
-- Professores nao podem excluir usuarios.
-- Administradores concentram permissoes administrativas.
-- `public/config.js` contem apenas configuracao publica do Firebase Web; a protecao real fica em regras do Firestore, restricoes da chave no Google Cloud e App Check.
+- Regras separadas por perfil de usuário.
+- Professores podem ver alunos e o próprio cadastro, mas não podem ver dados de outros professores ou administradores.
+- Professores não podem excluir usuários.
+- Salas são isoladas por criador/responsável.
+- Questões têm permissão de escrita por proprietário ou administrador.
+- A API key do Firebase Web é pública por natureza; a proteção real depende das regras do Firestore, restrições da chave no Google Cloud e Firebase App Check.
 
 ## Estrutura do Projeto
 
@@ -107,9 +119,9 @@ O projeto usa Firebase Authentication, Cloud Firestore e Firebase Hosting. A int
 - Firebase Security Rules
 - Font Awesome
 
-## Configuracao Local
+## Configuração Local
 
-1. Clone o repositorio:
+1. Clone o repositório:
 
 ```bash
 git clone https://github.com/luyzinho27/quizz-master-cameta.git
@@ -163,13 +175,13 @@ Quando houver problema de certificado no Windows/Node, use:
 $env:NODE_OPTIONS='--use-system-ca'
 ```
 
-## Observacoes Importantes
+## Observações Importantes
 
-- O arquivo `public/config.js` e publico no navegador por natureza. Isso e esperado em apps Firebase Web.
-- Restrinja a API key no Google Cloud por dominio e por APIs usadas.
-- Ative Firebase App Check para reduzir abuso da aplicacao.
+- O arquivo `public/config.js` é público no navegador por natureza. Isso é esperado em apps Firebase Web.
+- Restrinja a API key no Google Cloud por domínio e por APIs usadas.
+- Ative o Firebase App Check para reduzir abuso da aplicação.
 - Depois de alterar `firestore.rules`, publique as regras com `firebase deploy --only firestore:rules`.
 
 ## Autor
 
-Desenvolvido por Luiz Sergio Garcia Carvalho.
+Desenvolvido por Luiz Sérgio Garcia Carvalho.
