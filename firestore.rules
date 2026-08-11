@@ -22,6 +22,11 @@ service cloud.firestore {
       );
     }
 
+    function isStudent() {
+      return currentUserExists() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.userType == 'aluno';
+    }
+
     function isAdminOrProfessor() {
       return isAdmin() || isProfessor();
     }
@@ -72,6 +77,7 @@ service cloud.firestore {
 
     match /rooms/{roomId} {
       allow get, list: if signedIn() && (
+        isAdmin() ||
         ownsExistingResource() ||
         request.auth.uid in resource.data.studentIds
       );
@@ -94,15 +100,19 @@ service cloud.firestore {
     }
 
     match /quizzes/{quizId} {
-      allow read: if signedIn();
+      allow read: if signedIn() && (
+        isAdmin() ||
+        ownsExistingResource() ||
+        (isStudent() && resource.data.status == 'active')
+      );
 
       allow create: if signedIn() && (
-        isAdmin() ||
+        (isAdmin() && ownsRequestedResource()) ||
         (isProfessor() && request.resource.data.visibility == 'room' && ownsRequestedResource())
       );
 
       allow update: if signedIn() && (
-        isAdmin() ||
+        (isAdmin() && ownsExistingResource() && ownsRequestedResource()) ||
         (
           isProfessor() &&
           resource.data.visibility == 'room' &&
@@ -113,7 +123,7 @@ service cloud.firestore {
       );
 
       allow delete: if signedIn() && (
-        isAdmin() ||
+        (isAdmin() && ownsExistingResource()) ||
         (isProfessor() && resource.data.visibility == 'room' && ownsExistingResource())
       );
     }
@@ -144,17 +154,29 @@ service cloud.firestore {
     match /userQuizzes/{userQuizId} {
       allow read: if signedIn() && (
         isAdminOrProfessor() ||
-        resource.data.userId == request.auth.uid
+        resource.data.userId == request.auth.uid ||
+        resource.data.status == 'completed'
       );
 
       allow create: if signedIn() && (
         isAdmin() ||
-        request.resource.data.userId == request.auth.uid
+        (
+          request.resource.data.userId == request.auth.uid &&
+          request.resource.data.status == 'in-progress'
+        )
       );
 
-      allow update, delete: if signedIn() && (
+      allow update: if signedIn() && (
         isAdmin() ||
-        resource.data.userId == request.auth.uid
+        (
+          resource.data.userId == request.auth.uid &&
+          request.resource.data.userId == request.auth.uid &&
+          resource.data.status != 'completed'
+        )
+      );
+
+      allow delete: if signedIn() && (
+        isAdmin()
       );
     }
 

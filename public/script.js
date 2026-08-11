@@ -420,10 +420,64 @@ function studentCanAccessQuiz(quiz, rooms = []) {
     return !quiz.visibility || quiz.visibility === 'all';
 }
 
+function getAttemptTimestamp(attempt) {
+    return getTimestampMs(attempt.completedAt) ||
+        getTimestampMs(attempt.updatedAt) ||
+        getTimestampMs(attempt.startTime) ||
+        0;
+}
+
+function getStudentQuizAttempts(quizId = null) {
+    if (!currentUser || currentUser.userType !== 'aluno') return Promise.resolve([]);
+    let query = db.collection('userQuizzes').where('userId', '==', currentUser.uid);
+    if (quizId) query = query.where('quizId', '==', quizId);
+    return fetchQuery(query);
+}
+
+function getLatestAttempt(attempts, status = null) {
+    return attempts
+        .filter(attempt => !status || attempt.status === status)
+        .sort((a, b) => getAttemptTimestamp(b) - getAttemptTimestamp(a))[0] || null;
+}
+
+function mapAttemptsByQuiz(attempts) {
+    return attempts.reduce((map, attempt) => {
+        const quizId = attempt.quizId;
+        if (!quizId) return map;
+        if (!map[quizId]) map[quizId] = [];
+        map[quizId].push(attempt);
+        return map;
+    }, {});
+}
+
+function getVisibleStudentQuizzes() {
+    if (!currentUser || currentUser.userType !== 'aluno') return Promise.resolve([]);
+    return Promise.all([fetchCollectionWhere('quizzes', 'status', '==', 'active'), fetchStudentRooms()])
+        .then(([quizzes, rooms]) => quizzes.filter(quiz => studentCanAccessQuiz(quiz, rooms)));
+}
+
+function resumeQuizFromAttempt(quiz, attempt) {
+    currentQuiz = quiz;
+    userQuizId = attempt.id;
+    currentQuestionIndex = Number(attempt.currentQuestionIndex || 0);
+    userAnswers = Array.isArray(attempt.answers) ? attempt.answers : [];
+    exitCount = Number(attempt.exitCount || 0);
+    totalTime = Math.max(60, Number(attempt.totalTime) || ((Number(quiz.time) || 0) * 60));
+    timeRemaining = typeof attempt.timeRemaining === 'number' ? Math.max(0, attempt.timeRemaining) : totalTime;
+    quizStartTime = Date.now();
+
+    return loadQuizQuestions(quiz.id, {
+        questionIds: attempt.questionIds || [],
+        preserveAnswers: true,
+        resume: true
+    });
+}
+
 function updateUserQuizProgress() {
     if (!currentUser || !currentQuiz || !userQuizId) return Promise.resolve();
 
     const progress = {
+        status: 'in-progress',
         answers: normalizeAnswers(userAnswers, currentQuestions.length),
         currentQuestionIndex,
         timeRemaining,
@@ -505,7 +559,11 @@ function loadQuizQuestions(quizId, options = {}) {
             userAnswers = normalizeAnswers(options.preserveAnswers ? userAnswers : [], currentQuestions.length);
             currentQuestionIndex = Math.min(currentQuestionIndex, currentQuestions.length - 1);
             totalTime = Math.max(60, (Number(quiz.time) || 0) * 60);
-            if (!timeRemaining || !options.resume) timeRemaining = totalTime;
+            if (!options.resume) {
+                timeRemaining = totalTime;
+            } else if (typeof timeRemaining !== 'number') {
+                timeRemaining = totalTime;
+            }
 
             setText('quiz-title-display', quiz.title || 'Quiz');
             setText('quiz-description-display', quiz.description || '');
@@ -527,12 +585,27 @@ function startQuiz(quizId, options = {}) {
     showLoading();
     return Promise.all([
         db.collection('quizzes').doc(quizId).get(),
-        fetchStudentRooms()
-    ]).then(([quizDoc, rooms]) => {
+        fetchStudentRooms(),
+        getStudentQuizAttempts(quizId)
+    ]).then(([quizDoc, rooms, attempts]) => {
         if (!quizDoc.exists) throw new Error('Quiz não encontrado.');
         const quiz = { id: quizDoc.id, ...quizDoc.data() };
         if (!studentCanAccessQuiz(quiz, rooms)) {
             throw new Error('Este quiz não está disponível para sua conta.');
+        }
+
+        const completedAttempt = getLatestAttempt(attempts, 'completed');
+        if (completedAttempt) {
+            throw new Error('Você já concluiu este quiz. A tentativa ficou bloqueada para nova realização.');
+        }
+
+        const inProgressAttempt = getLatestAttempt(attempts, 'in-progress');
+        if (inProgressAttempt) {
+            return resumeQuizFromAttempt(quiz, inProgressAttempt).then(resumed => {
+                hideLoading();
+                if (options.fromLink) clearQuizLinkIdFromUrl();
+                return resumed;
+            });
         }
 
         currentQuiz = quiz;
@@ -641,6 +714,20 @@ function showQuizResult(result) {
     if (reviewButton) reviewButton.classList.toggle('hidden', currentQuiz && currentQuiz.allowReview === false);
 }
 
+function updateResultRankingPosition(quizId, userId) {
+    if (!quizId || !userId) return Promise.resolve();
+    return fetchQuery(db.collection('userQuizzes')
+        .where('quizId', '==', quizId)
+        .where('status', '==', 'completed'))
+        .then(results => {
+            const ordered = results
+                .sort((a, b) => Number(b.score || 0) - Number(a.score || 0) || Number(a.timeTaken || 0) - Number(b.timeTaken || 0));
+            const position = ordered.findIndex(result => result.userId === userId);
+            setText('ranking-position', position >= 0 ? `${position + 1}º` : '-');
+        })
+        .catch(error => console.error('Erro ao calcular posição no ranking:', error));
+}
+
 function finishQuiz(options = {}) {
     if (!currentQuiz || !currentQuestions.length || !userQuizId) return Promise.resolve(false);
     const unansweredCount = userAnswers.filter(answer => !answer).length;
@@ -665,10 +752,14 @@ function finishQuiz(options = {}) {
         currentQuestionIndex,
         questionIds: currentQuestions.map(question => question.id).filter(Boolean),
         score: percentage,
+        userName: currentUser.name || currentUser.email || 'Aluno',
         correctAnswers: correct,
         wrongAnswers: wrong,
         totalQuestions: total,
         timeTaken,
+        exitCount,
+        exitLimitReached: Boolean(options.exitLimit),
+        finishReason: options.exitLimit ? 'exit-limit' : 'completed',
         completedAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -677,6 +768,7 @@ function finishQuiz(options = {}) {
         .then(() => {
             setQuizActive(false, { clearLocal: true, persist: false });
             showQuizResult(result);
+            updateResultRankingPosition(currentQuiz.id, currentUser.uid);
             return true;
         })
         .catch(error => {
@@ -1156,26 +1248,27 @@ function confirmExitQuiz() {
         showDashboard();
         return;
     }
-    const confirmMsg = 'Tem certeza que deseja sair do quiz? O progresso local deste quiz será descartado.';
+    const confirmMsg = 'Tem certeza que deseja sair do quiz? Seu progresso será salvo para continuar depois.';
     if (!confirm(confirmMsg)) {
         return;
     }
-    stopQuizTimer();
-    setQuizActive(false, { clearLocal: true, persist: false });
-    // Limpar estado local do quiz
-    if (currentUser && currentQuiz) {
-        clearQuizStateLocal(currentUser.uid, currentQuiz.id);
+
+    exitCount += 1;
+
+    if (exitCount >= 3) {
+        alert('Você saiu deste quiz 3 vezes. A tentativa será finalizada com as respostas feitas até agora.');
+        finishQuiz({ forced: true, exitLimit: true });
+        return;
     }
-    // Resetar variáveis de estado
-    currentQuiz = null;
-    currentQuestions = [];
-    currentQuestionIndex = 0;
-    userAnswers = [];
-    quizTimer = null;
-    timeRemaining = 0;
-    totalTime = 0;
-    // Exibir dashboard principal
-    showDashboard();
+
+    stopQuizTimer();
+    updateUserQuizProgress(true).finally(() => {
+        setQuizActive(false);
+        quizContainer.classList.add('hidden');
+        showDashboard();
+        alert(`Progresso salvo. Você ainda pode sair ${3 - exitCount} vez(es) antes da finalização automática.`);
+    });
+
 }
 
 // Função de logout
@@ -1467,6 +1560,8 @@ function initEventListeners() {
         }
     });
     safeOn('review-quiz', 'click', () => invokeIfAvailable('handleReviewClick'));
+    safeOn('quiz-master-select', 'change', () => loadSelectedQuizRanking('student', 'quiz-master-select', 'quiz-master-list'));
+    safeOn('admin-quiz-master-select', 'change', () => loadSelectedQuizRanking('admin', 'admin-quiz-master-select', 'admin-quiz-master-list'));
 
     safeOn('create-quiz-btn', 'click', () => invokeIfAvailable('openQuizModal'));
     safeOn('create-question-btn', 'click', () => invokeIfAvailable('openQuestionModal'));
@@ -1477,6 +1572,7 @@ function initEventListeners() {
     safeOn('admin-create-room-btn', 'click', () => invokeIfAvailable('openRoomModal'));
     safeOn('teacher-create-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
     safeOn('teacher-create-question-btn', 'click', () => invokeIfAvailable('openQuestionModal'));
+    safeOn('teacher-import-questions-btn', 'click', () => invokeIfAvailable('openImportModal'));
     safeOn('admin-create-room-quiz-btn', 'click', () => invokeIfAvailable('openTeacherQuizModal'));
     safeOn('create-student-btn', 'click', () => invokeIfAvailable('openTeacherUserModal'));
     safeOn('exit-quiz-btn', 'click', confirmExitQuiz);
@@ -1708,6 +1804,17 @@ function getOwnerPayload() {
     };
 }
 
+function resourceOwnedByCurrentUser(resource) {
+    return Boolean(currentUser && resource && (
+        resource.ownerId === currentUser.uid ||
+        resource.teacherId === currentUser.uid
+    ));
+}
+
+function canEditOwnedResource(resource) {
+    return canManageTeacherResources() && resourceOwnedByCurrentUser(resource);
+}
+
 function addClickHandler(selector, handler) {
     document.querySelectorAll(selector).forEach(element => {
         element.addEventListener('click', handler);
@@ -1758,6 +1865,14 @@ function fetchManagedRoomsForTeacher() {
     return Promise.all([
         fetchCollectionWhere('rooms', 'ownerId', '==', currentUser.uid),
         fetchCollectionWhere('rooms', 'teacherId', '==', currentUser.uid)
+    ]).then(results => uniqueById(results.flat()));
+}
+
+function fetchOwnedQuizzesForCurrentUser() {
+    if (!currentUser) return Promise.resolve([]);
+    return Promise.all([
+        fetchCollectionWhere('quizzes', 'ownerId', '==', currentUser.uid),
+        fetchCollectionWhere('quizzes', 'teacherId', '==', currentUser.uid)
     ]).then(results => uniqueById(results.flat()));
 }
 
@@ -2023,7 +2138,8 @@ function openRoomModal(roomId = null) {
     const loadRoom = roomId
         ? db.collection('rooms').doc(roomId).get().then(doc => {
             if (!doc.exists) throw new Error('Sala não encontrada.');
-            const room = doc.data();
+            const room = { id: doc.id, ...doc.data() };
+            if (!canEditRoom(room)) throw new Error('Você só pode editar salas criadas por você.');
             setValue('room-name', room.name);
             setValue('room-description', room.description || '');
             setValue('room-status', room.status || 'active');
@@ -2058,7 +2174,12 @@ function saveRoom() {
     };
 
     const request = editingRoomId
-        ? db.collection('rooms').doc(editingRoomId).set(roomData, { merge: true })
+        ? db.collection('rooms').doc(editingRoomId).get().then(doc => {
+            if (!doc.exists) throw new Error('Sala não encontrada.');
+            const room = { id: doc.id, ...doc.data() };
+            if (!canEditRoom(room)) throw new Error('Você só pode editar salas criadas por você.');
+            return db.collection('rooms').doc(editingRoomId).set(roomData, { merge: true });
+        })
         : db.collection('rooms').add({ ...roomData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
 
     request.then(() => {
@@ -2069,15 +2190,31 @@ function saveRoom() {
 }
 
 function roomVisibleForCurrentUser(room) {
-    return currentUser && (room.teacherId === currentUser.uid || room.ownerId === currentUser.uid);
+    return isAdminUser() || resourceOwnedByCurrentUser(room);
 }
 
-function getManagedRooms() {
+function canEditRoom(room) {
+    return canEditOwnedResource(room);
+}
+
+function getOwnedRooms() {
     if (canManageTeacherResources()) {
-        return fetchManagedRoomsForTeacher().then(rooms => firebaseOrderByCreatedDesc(rooms.filter(roomVisibleForCurrentUser)));
+        return fetchManagedRoomsForTeacher().then(rooms => firebaseOrderByCreatedDesc(rooms.filter(resourceOwnedByCurrentUser)));
     }
 
     return Promise.resolve([]);
+}
+
+function getManagedRooms() {
+    return getOwnedRooms();
+}
+
+function getVisibleRoomsForDashboard() {
+    if (isAdminUser()) {
+        return fetchCollection('rooms').then(rooms => firebaseOrderByCreatedDesc(rooms));
+    }
+
+    return getOwnedRooms();
 }
 
 function renderRooms(listId, rooms) {
@@ -2098,8 +2235,9 @@ function renderRooms(listId, rooms) {
                 <p><strong>Criada em:</strong> ${formatDate(room.createdAt)}</p>
             </div>
             <div class="card-actions">
-                <button class="btn btn-primary room-edit" data-id="${escapeHtml(room.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
-                <button class="btn btn-danger room-delete" data-id="${escapeHtml(room.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+                ${canEditRoom(room) ? `<button class="btn btn-primary room-edit" data-id="${escapeHtml(room.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>` : ''}
+                ${canEditRoom(room) ? `<button class="btn btn-danger room-delete" data-id="${escapeHtml(room.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
+                ${!canEditRoom(room) ? '<span class="card-badge card-badge-secondary">Somente visualização</span>' : ''}
             </div>
         </div>
     `).join('');
@@ -2123,7 +2261,7 @@ function loadTeacherRooms() {
 
 function loadAdminRooms() {
     setListLoading('admin-rooms-list', 'Carregando salas...');
-    return getManagedRooms()
+    return getVisibleRoomsForDashboard()
         .then(rooms => renderRooms('admin-rooms-list', rooms))
         .catch(error => {
             console.error('Erro ao carregar salas:', error);
@@ -2132,9 +2270,16 @@ function loadAdminRooms() {
 }
 
 function deleteRoom(roomId) {
-    if (!confirm('Tem certeza que deseja excluir esta sala?')) return;
-    db.collection('rooms').doc(roomId).delete()
-        .then(() => {
+    return db.collection('rooms').doc(roomId).get()
+        .then(doc => {
+            if (!doc.exists) throw new Error('Sala não encontrada.');
+            const room = { id: doc.id, ...doc.data() };
+            if (!canEditRoom(room)) throw new Error('Você só pode excluir salas criadas por você.');
+            if (!confirm('Tem certeza que deseja excluir esta sala?')) return false;
+            return db.collection('rooms').doc(roomId).delete();
+        })
+        .then(deleted => {
+            if (deleted === false) return;
             alert('Sala excluída com sucesso!');
             isAdminUser() ? loadAdminRooms() : loadTeacherRooms();
         })
@@ -2163,7 +2308,8 @@ function openTeacherQuizModal(quizId = null) {
             if (!quizId) return null;
             return db.collection('quizzes').doc(quizId).get().then(doc => {
                 if (!doc.exists) throw new Error('Quiz não encontrado.');
-                const quiz = doc.data();
+                const quiz = { id: doc.id, ...doc.data() };
+                if (!canEditQuiz(quiz)) throw new Error('Você só pode editar quizzes criados por você.');
                 setValue('teacher-quiz-title', quiz.title);
                 setValue('teacher-quiz-description', quiz.description || '');
                 setValue('teacher-quiz-category', quiz.category || '');
@@ -2210,7 +2356,12 @@ function saveTeacherQuiz() {
     };
 
     const request = editingTeacherQuizId
-        ? db.collection('quizzes').doc(editingTeacherQuizId).set(quizData, { merge: true })
+        ? db.collection('quizzes').doc(editingTeacherQuizId).get().then(doc => {
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
+            const quiz = { id: doc.id, ...doc.data() };
+            if (!canEditQuiz(quiz)) throw new Error('Você só pode editar quizzes criados por você.');
+            return db.collection('quizzes').doc(editingTeacherQuizId).set(quizData, { merge: true });
+        })
         : db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
 
     request.then(() => {
@@ -2226,6 +2377,14 @@ function quizVisibleForCurrentTeacher(quiz, roomIds = []) {
     const isOwnRoomQuiz = quiz.roomId && roomIds.includes(quiz.roomId);
     if (quiz.visibility === 'room' || quiz.roomId) return isOwnQuiz || isOwnRoomQuiz;
     return isAdminUser();
+}
+
+function canEditQuiz(quiz) {
+    return canEditOwnedResource(quiz);
+}
+
+function canDeleteQuiz(quiz) {
+    return canEditOwnedResource(quiz);
 }
 
 function renderTeacherQuizzes(listId, quizzes, rooms = []) {
@@ -2248,9 +2407,10 @@ function renderTeacherQuizzes(listId, quizzes, rooms = []) {
                 <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
             </div>
             <div class="card-actions">
-                <button class="btn btn-primary teacher-quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
+                ${canEditQuiz(quiz) ? `<button class="btn btn-primary teacher-quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>` : ''}
                 <button class="btn btn-secondary teacher-quiz-link" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-link"></i><span class="btn-text">Link</span></button>
-                <button class="btn btn-danger teacher-quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+                ${canDeleteQuiz(quiz) ? `<button class="btn btn-danger teacher-quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
+                ${!canEditQuiz(quiz) ? '<span class="card-badge card-badge-secondary">Somente visualização</span>' : ''}
             </div>
         </div>
     `).join('');
@@ -2264,7 +2424,7 @@ function renderTeacherQuizzes(listId, quizzes, rooms = []) {
 
 function loadTeacherQuizzes() {
     setListLoading('teacher-quizzes-list', 'Carregando quizzes...');
-    return Promise.all([getManagedRooms(), fetchCollection('quizzes')])
+    return Promise.all([getManagedRooms(), fetchOwnedQuizzesForCurrentUser()])
         .then(([rooms, quizzes]) => {
             const roomIds = rooms.map(room => room.id);
             const visible = firebaseOrderByCreatedDesc(quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds)));
@@ -2555,7 +2715,8 @@ function openQuizModal(quizId = null) {
         if (!quizId) return null;
         return db.collection('quizzes').doc(quizId).get().then(doc => {
             if (!doc.exists) throw new Error('Quiz não encontrado.');
-            const quiz = doc.data();
+            const quiz = { id: doc.id, ...doc.data() };
+            if (!canEditQuiz(quiz)) throw new Error('Você só pode editar quizzes criados por você.');
             setValue('quiz-title', quiz.title);
             setValue('quiz-description', quiz.description || '');
             setValue('quiz-category', quiz.category || '');
@@ -2612,7 +2773,12 @@ function saveQuiz() {
     }
 
     const request = editingQuizId
-        ? db.collection('quizzes').doc(editingQuizId).set(quizData, { merge: true })
+        ? db.collection('quizzes').doc(editingQuizId).get().then(doc => {
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
+            const quiz = { id: doc.id, ...doc.data() };
+            if (!canEditQuiz(quiz)) throw new Error('Você só pode editar quizzes criados por você.');
+            return db.collection('quizzes').doc(editingQuizId).set(quizData, { merge: true });
+        })
         : db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
 
     request.then(() => {
@@ -2641,8 +2807,9 @@ function renderAdminQuizzes(quizzes) {
                 <p><strong>Visibilidade:</strong> ${escapeHtml(quiz.visibility || 'all')}</p>
             </div>
             <div class="card-actions">
-                <button class="btn btn-primary quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>
-                <button class="btn btn-danger quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>
+                ${canEditQuiz(quiz) ? `<button class="btn btn-primary quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>` : ''}
+                ${canDeleteQuiz(quiz) ? `<button class="btn btn-danger quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
+                ${!canEditQuiz(quiz) ? '<span class="card-badge card-badge-secondary">Somente visualização</span>' : ''}
             </div>
         </div>
     `).join('');
@@ -2657,12 +2824,8 @@ function renderAdminQuizzes(quizzes) {
 
 function loadAdminQuizzes() {
     setListLoading('admin-quizzes-list', 'Carregando quizzes...');
-    return Promise.all([fetchCollection('quizzes'), getManagedRooms()])
-        .then(([quizzes, rooms]) => {
-            const roomIds = rooms.map(room => room.id);
-            const visible = quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds));
-            renderAdminQuizzes(firebaseOrderByCreatedDesc(visible));
-        })
+    return fetchCollection('quizzes')
+        .then(quizzes => renderAdminQuizzes(firebaseOrderByCreatedDesc(quizzes)))
         .catch(error => {
             console.error('Erro ao carregar quizzes:', error);
             setListEmpty('admin-quizzes-list', 'Erro ao carregar quizzes.');
@@ -2670,9 +2833,16 @@ function loadAdminQuizzes() {
 }
 
 function deleteQuiz(quizId, onDone = loadAdminQuizzes) {
-    if (!confirm('Tem certeza que deseja excluir este quiz?')) return;
-    db.collection('quizzes').doc(quizId).delete()
-        .then(() => {
+    return db.collection('quizzes').doc(quizId).get()
+        .then(doc => {
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
+            const quiz = { id: doc.id, ...doc.data() };
+            if (!canDeleteQuiz(quiz)) throw new Error('Você só pode excluir quizzes criados por você.');
+            if (!confirm('Tem certeza que deseja excluir este quiz?')) return false;
+            return db.collection('quizzes').doc(quizId).delete();
+        })
+        .then(deleted => {
+            if (deleted === false) return;
             alert('Quiz excluído com sucesso!');
             onDone();
         })
@@ -2864,7 +3034,7 @@ function closeImportModal() {
 }
 
 function importQuestions() {
-    if (!isAdminUser()) return alert('Apenas administradores podem importar questões em lote.');
+    if (!canManageQuestions()) return alert('Apenas administradores e professores podem importar questões em lote.');
     let questions;
     try {
         questions = JSON.parse(document.getElementById('json-data').value);
@@ -2890,17 +3060,18 @@ function importQuestions() {
     batch.commit().then(() => {
         alert('Questões importadas com sucesso!');
         closeImportModal();
-        loadAdminQuestions();
+        refreshQuestionsLists();
     }).catch(error => alert('Erro ao importar questões: ' + getAuthErrorMessage(error)));
 }
 
 function loadQuizzes() {
     const list = setListLoading('quizzes-list', 'Carregando quizzes...');
     if (!list) return Promise.resolve();
-    return Promise.all([fetchCollection('quizzes'), fetchStudentRooms()])
-        .then(([quizzes, rooms]) => {
+    return Promise.all([fetchCollectionWhere('quizzes', 'status', '==', 'active'), fetchStudentRooms(), getStudentQuizAttempts()])
+        .then(([quizzes, rooms, attempts]) => {
             const activeRooms = rooms.filter(room => (room.studentIds || []).includes(currentUser.uid));
             const roomIds = activeRooms.map(room => room.id);
+            const attemptsByQuiz = mapAttemptsByQuiz(attempts);
             const visible = quizzes.filter(quiz => {
                 if (quiz.status !== 'active') return false;
                 if (quiz.visibility === 'specific') return (quiz.allowedStudents || []).includes(currentUser.uid);
@@ -2910,17 +3081,29 @@ function loadQuizzes() {
 
             if (!visible.length) return setListEmpty('quizzes-list', 'Nenhum quiz disponível.');
             list.innerHTML = firebaseOrderByCreatedDesc(visible).map(quiz => `
+                ${(() => {
+                    const quizAttempts = attemptsByQuiz[quiz.id] || [];
+                    const completedAttempt = getLatestAttempt(quizAttempts, 'completed');
+                    const inProgressAttempt = getLatestAttempt(quizAttempts, 'in-progress');
+                    const isCompleted = Boolean(completedAttempt);
+                    const buttonText = isCompleted ? 'Concluído' : inProgressAttempt ? 'Continuar' : 'Iniciar';
+                    const buttonClass = isCompleted ? 'btn-secondary' : 'btn-primary';
+                    return `
                 <div class="card">
-                    <div class="card-header"><h3 class="card-title">${escapeHtml(quiz.title)}</h3><span class="card-badge">${escapeHtml(quiz.category || 'Geral')}</span></div>
+                    <div class="card-header"><h3 class="card-title">${escapeHtml(quiz.title)}</h3><span class="card-badge ${isCompleted ? 'card-badge-secondary' : ''}">${isCompleted ? 'Concluído' : escapeHtml(quiz.category || 'Geral')}</span></div>
                     <div class="card-content">
                         <p>${escapeHtml(quiz.description || 'Sem descrição')}</p>
                         <p><strong>Questões:</strong> ${quiz.questionsCount || 0}</p>
                         <p><strong>Tempo:</strong> ${quiz.time || 0} minutos</p>
+                        ${isCompleted ? `<p><strong>Nota:</strong> ${Number(completedAttempt.score || 0)}%</p>` : ''}
+                        ${inProgressAttempt && !isCompleted ? `<p><strong>Saídas:</strong> ${Number(inProgressAttempt.exitCount || 0)}/3</p>` : ''}
                     </div>
                     <div class="card-actions">
-                        <button class="btn btn-primary quiz-start" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-play"></i><span class="btn-text">Iniciar</span></button>
+                        <button class="btn ${buttonClass} quiz-start" data-id="${escapeHtml(quiz.id)}" ${isCompleted ? 'disabled' : ''}><i class="fas fa-play"></i><span class="btn-text">${buttonText}</span></button>
                     </div>
                 </div>
+                    `;
+                })()}
             `).join('');
             addClickHandler('#quizzes-list .quiz-start', event => startQuiz(event.currentTarget.dataset.id));
         })
@@ -2959,7 +3142,8 @@ function loadTeacherRanking() {
 function loadGenericRanking(listId) {
     const list = setListLoading(listId, 'Carregando ranking...');
     if (!list) return Promise.resolve();
-    return Promise.all([fetchCollection('userQuizzes'), fetchCollection('users')])
+    const usersRequest = isAdminUser() || isTeacherUser() ? fetchCollection('users') : Promise.resolve([]);
+    return Promise.all([fetchCollectionWhere('userQuizzes', 'status', '==', 'completed'), usersRequest])
         .then(([results, users]) => renderRankingList(listId, results, users))
         .catch(error => {
             console.error('Erro ao carregar ranking:', error);
@@ -2975,38 +3159,149 @@ function renderRankingList(listId, results, users) {
     const scores = {};
     results.filter(result => result.status === 'completed').forEach(result => {
         const userId = result.userId;
-        if (!scores[userId]) scores[userId] = { userId, totalScore: 0, totalQuizzes: 0 };
+        if (!scores[userId]) {
+            scores[userId] = {
+                userId,
+                userName: result.userName || usersMap[userId]?.name || 'Aluno',
+                totalScore: 0,
+                totalQuizzes: 0
+            };
+        }
         scores[userId].totalScore += Number(result.score || 0);
         scores[userId].totalQuizzes += 1;
     });
-    const ranking = Object.values(scores).sort((a, b) => b.totalScore - a.totalScore);
+    const ranking = Object.values(scores)
+        .map(item => ({ ...item, averageScore: item.totalQuizzes ? Math.round(item.totalScore / item.totalQuizzes) : 0 }))
+        .sort((a, b) => b.averageScore - a.averageScore || b.totalScore - a.totalScore);
     if (!ranking.length) return setListEmpty(listId, 'Nenhum resultado encontrado.');
     list.innerHTML = ranking.map((item, index) => `
         <div class="ranking-item">
             <div class="ranking-position">${index + 1}</div>
             <div class="ranking-info">
-                <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || 'Usuário')}</div>
+                <div class="ranking-name">${escapeHtml(usersMap[item.userId]?.name || item.userName || 'Usuário')}</div>
                 <div class="ranking-details">${item.totalQuizzes} quiz(es)</div>
             </div>
-            <div class="ranking-score">${item.totalScore} pts</div>
+            <div class="ranking-score">${item.averageScore}%</div>
         </div>
     `).join('');
 }
 
+function populateQuizRankingSelect(selectId, quizzes) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const currentValue = select.value;
+    select.innerHTML = '<option value="">Selecione um quiz...</option>';
+    firebaseOrderByCreatedDesc([...quizzes]).forEach(quiz => {
+        const option = document.createElement('option');
+        option.value = quiz.id;
+        option.textContent = quiz.title || 'Quiz';
+        select.appendChild(option);
+    });
+    if (currentValue && quizzes.some(quiz => quiz.id === currentValue)) select.value = currentValue;
+}
+
+function getQuizzesForRankingScope(scope) {
+    if (scope === 'student') return getVisibleStudentQuizzes();
+    if (scope === 'teacher') {
+        return Promise.all([getManagedRooms(), fetchOwnedQuizzesForCurrentUser()]).then(([rooms, quizzes]) => {
+            const roomIds = rooms.map(room => room.id);
+            return quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds));
+        });
+    }
+    return fetchCollection('quizzes');
+}
+
+function loadSelectedQuizRanking(scope, selectId, listId) {
+    const quizId = document.getElementById(selectId)?.value || '';
+    if (!quizId) {
+        setListEmpty(listId, 'Selecione um quiz para ver o ranking específico.');
+        return Promise.resolve();
+    }
+
+    const usersRequest = isAdminUser() || isTeacherUser() ? fetchCollection('users') : Promise.resolve([]);
+    return Promise.all([
+        fetchQuery(db.collection('userQuizzes').where('quizId', '==', quizId).where('status', '==', 'completed')),
+        usersRequest
+    ])
+        .then(([results, users]) => renderRankingList(listId, results, users))
+        .catch(error => {
+            console.error('Erro ao carregar ranking por quiz:', error);
+            setListEmpty(listId, 'Erro ao carregar ranking por quiz.');
+        });
+}
+
+function loadQuizRankingSection(scope, selectId, listId) {
+    setListEmpty(listId, 'Selecione um quiz para ver o ranking específico.');
+    return getQuizzesForRankingScope(scope)
+        .then(quizzes => {
+            populateQuizRankingSelect(selectId, quizzes);
+            if (document.getElementById(selectId)?.value) {
+                return loadSelectedQuizRanking(scope, selectId, listId);
+            }
+            return null;
+        })
+        .catch(error => {
+            console.error('Erro ao carregar quizzes do ranking:', error);
+            setListEmpty(listId, 'Erro ao carregar quizzes do ranking.');
+        });
+}
+
 function loadQuizRankings() {
-    setListEmpty('quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
+    return loadQuizRankingSection('student', 'quiz-master-select', 'quiz-master-list');
 }
 
 function loadAdminQuizRankings() {
-    setListEmpty('admin-quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
+    return loadQuizRankingSection('admin', 'admin-quiz-master-select', 'admin-quiz-master-list');
 }
 
 function loadTeacherQuizRankings() {
-    setListEmpty('teacher-quiz-master-list', 'Selecione um quiz para ver o ranking específico.');
+    return Promise.all([getQuizzesForRankingScope('teacher'), fetchCollectionWhere('userQuizzes', 'status', '==', 'completed'), fetchUsersByType('aluno')])
+        .then(([quizzes, results, users]) => {
+            const quizIds = new Set(quizzes.map(quiz => quiz.id));
+            renderRankingList('teacher-quiz-master-list', results.filter(result => quizIds.has(result.quizId)), users);
+        })
+        .catch(error => {
+            console.error('Erro ao carregar ranking por quiz do professor:', error);
+            setListEmpty('teacher-quiz-master-list', 'Erro ao carregar ranking por quiz.');
+        });
 }
 
 function loadUserHistory() {
-    setListEmpty('history-list', 'Histórico indisponível nesta versão.');
+    const list = setListLoading('history-list', 'Carregando histórico...');
+    if (!list) return Promise.resolve();
+    return Promise.all([getStudentQuizAttempts(), fetchCollectionWhere('quizzes', 'status', '==', 'active')])
+        .then(([attempts, quizzes]) => {
+            const quizzesMap = Object.fromEntries(quizzes.map(quiz => [quiz.id, quiz]));
+            const ordered = attempts.sort((a, b) => getAttemptTimestamp(b) - getAttemptTimestamp(a));
+            if (!ordered.length) return setListEmpty('history-list', 'Nenhuma tentativa encontrada.');
+
+            list.innerHTML = ordered.map(attempt => {
+                const quiz = quizzesMap[attempt.quizId] || {};
+                const completed = attempt.status === 'completed';
+                return `
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">${escapeHtml(attempt.quizTitle || quiz.title || 'Quiz')}</h3>
+                            <span class="card-badge ${completed ? '' : 'card-badge-secondary'}">${completed ? 'Concluído' : 'Em andamento'}</span>
+                        </div>
+                        <div class="card-content">
+                            <p><strong>Nota:</strong> ${completed ? `${Number(attempt.score || 0)}%` : 'Em andamento'}</p>
+                            <p><strong>Acertos:</strong> ${Number(attempt.correctAnswers || 0)} de ${Number(attempt.totalQuestions || quiz.questionsCount || 0)}</p>
+                            <p><strong>Tempo:</strong> ${formatSeconds(Number(attempt.timeTaken || 0))}</p>
+                            <p><strong>Saídas:</strong> ${Number(attempt.exitCount || 0)}/3</p>
+                        </div>
+                        <div class="card-actions">
+                            ${!completed ? `<button class="btn btn-primary history-continue" data-id="${escapeHtml(attempt.quizId)}"><i class="fas fa-play"></i><span class="btn-text">Continuar</span></button>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            addClickHandler('#history-list .history-continue', event => startQuiz(event.currentTarget.dataset.id));
+        })
+        .catch(error => {
+            console.error('Erro ao carregar histórico:', error);
+            setListEmpty('history-list', 'Erro ao carregar histórico.');
+        });
 }
 
 function loadAdminReports() {
@@ -3018,7 +3313,7 @@ function loadTeacherReports() {
     const container = setListLoading(containerId, 'Carregando relatórios...');
     if (!container) return Promise.resolve();
 
-    return Promise.all([getManagedRooms(), fetchUsersByType('aluno'), fetchCollection('quizzes'), fetchCollection('questions')])
+    return Promise.all([getManagedRooms(), fetchUsersByType('aluno'), fetchOwnedQuizzesForCurrentUser(), fetchCollection('questions')])
         .then(([rooms, students, quizzes, questions]) => {
             const roomIds = rooms.map(room => room.id);
             const visibleStudents = students.filter(student => (student.roomIds || []).some(roomId => roomIds.includes(roomId)));
@@ -3039,7 +3334,7 @@ function loadTeacherReports() {
 function loadReports(containerId) {
     const container = setListLoading(containerId, 'Carregando relatórios...');
     if (!container) return Promise.resolve();
-    return Promise.all([fetchCollection('users'), getManagedRooms(), fetchCollection('quizzes'), fetchCollection('questions')])
+    return Promise.all([fetchCollection('users'), getVisibleRoomsForDashboard(), fetchCollection('quizzes'), fetchCollection('questions')])
         .then(([users, rooms, quizzes, questions]) => {
             container.innerHTML = `
                 <div class="card"><div class="card-content"><h3>${users.length}</h3><p>Usuários</p></div></div>
