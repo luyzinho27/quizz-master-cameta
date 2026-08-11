@@ -2808,6 +2808,7 @@ function renderAdminQuizzes(quizzes) {
             </div>
             <div class="card-actions">
                 ${canEditQuiz(quiz) ? `<button class="btn btn-primary quiz-edit" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-edit"></i><span class="btn-text">Editar</span></button>` : ''}
+                <button class="btn btn-secondary admin-quiz-link" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-link"></i><span class="btn-text">Link</span></button>
                 ${canDeleteQuiz(quiz) ? `<button class="btn btn-danger quiz-delete" data-id="${escapeHtml(quiz.id)}"><i class="fas fa-trash"></i><span class="btn-text">Excluir</span></button>` : ''}
                 ${!canEditQuiz(quiz) ? '<span class="card-badge card-badge-secondary">Somente visualização</span>' : ''}
             </div>
@@ -2820,6 +2821,7 @@ function renderAdminQuizzes(quizzes) {
         else openQuizModal(event.currentTarget.dataset.id);
     });
     addClickHandler('#admin-quizzes-list .quiz-delete', event => deleteQuiz(event.currentTarget.dataset.id, loadAdminQuizzes));
+    addClickHandler('#admin-quizzes-list .admin-quiz-link', event => copyQuizLink(event.currentTarget.dataset.id));
 }
 
 function loadAdminQuizzes() {
