@@ -818,10 +818,35 @@ function attemptStartQuizFromLink() {
     }
 
     pendingQuizLinkStarted = true;
-    return startQuiz(quizId, { fromLink: true }).then(started => {
-        if (!started) pendingQuizLinkStarted = false;
-        return started;
-    });
+    // Ensure the student is added to the room associated with the quiz, if any.
+    return db.collection('quizzes').doc(quizId).get()
+        .then(doc => {
+            if (!doc.exists) throw new Error('Quiz não encontrado.');
+            const quiz = { id: doc.id, ...doc.data() };
+            if (!quiz.roomId) return Promise.resolve();
+            return db.collection('rooms').doc(quiz.roomId).get()
+                .then(roomDoc => {
+                    if (!roomDoc.exists) return Promise.resolve();
+                    const room = { id: roomDoc.id, ...roomDoc.data() };
+                    const studentIds = room.studentIds || [];
+                    if (!studentIds.includes(currentUser.uid)) {
+                        return db.collection('rooms').doc(quiz.roomId).update({
+                            studentIds: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+                        });
+                    }
+                    return Promise.resolve();
+                });
+        })
+        .then(() => startQuiz(quizId, { fromLink: true }))
+        .then(started => {
+            if (!started) pendingQuizLinkStarted = false;
+            return started;
+        })
+        .catch(error => {
+            console.error('Erro ao iniciar quiz via link:', error);
+            pendingQuizLinkStarted = false;
+            return false;
+        });
 }
 
 function handleQuizBeforeUnload() {
