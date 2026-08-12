@@ -373,7 +373,7 @@ function shuffleItems(items) {
 function getQuizLinkId() {
     try {
         const params = new URLSearchParams(window.location.search);
-        return params.get('quiz') || params.get('q') || '';
+        return params.get('quiz') || params.get('q') || params.get('quizId') || params.get('id') || '';
     } catch (error) {
         return '';
     }
@@ -824,18 +824,18 @@ function attemptStartQuizFromLink() {
             if (!doc.exists) throw new Error('Quiz não encontrado.');
             const quiz = { id: doc.id, ...doc.data() };
             if (!quiz.roomId) return Promise.resolve();
-            return db.collection('rooms').doc(quiz.roomId).get()
-                .then(roomDoc => {
-                    if (!roomDoc.exists) return Promise.resolve();
-                    const room = { id: roomDoc.id, ...roomDoc.data() };
-                    const studentIds = room.studentIds || [];
-                    if (!studentIds.includes(currentUser.uid)) {
-                        return db.collection('rooms').doc(quiz.roomId).update({
-                            studentIds: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
-                        });
-                    }
-                    return Promise.resolve();
-                });
+            return db.runTransaction(async transaction => {
+                const roomRef = db.collection('rooms').doc(quiz.roomId);
+                const roomDoc = await transaction.get(roomRef);
+                if (!roomDoc.exists) return;
+                const roomData = roomDoc.data();
+                const studentIds = Array.isArray(roomData.studentIds) ? roomData.studentIds : [];
+                if (!studentIds.includes(currentUser.uid)) {
+                    transaction.update(roomRef, {
+                        studentIds: firebase.firestore.FieldValue.arrayUnion(currentUser.uid)
+                    });
+                }
+            });
         })
         .then(() => startQuiz(quizId, { fromLink: true }))
         .then(started => {
