@@ -2388,14 +2388,26 @@ function saveTeacherQuiz() {
         ...getOwnerPayload()
     };
 
+    // Validate that the selected room belongs to the current user
+    const validateRoomOwnership = () =>
+        db.collection('rooms').doc(roomId).get().then(doc => {
+            if (!doc.exists) throw new Error('Sala não encontrada.');
+            const room = { id: doc.id, ...doc.data() };
+            if (!canEditRoom(room)) throw new Error('Você só pode criar quizzes em salas que você criou.');
+        });
+
     const request = editingTeacherQuizId
         ? db.collection('quizzes').doc(editingTeacherQuizId).get().then(doc => {
             if (!doc.exists) throw new Error('Quiz não encontrado.');
             const quiz = { id: doc.id, ...doc.data() };
             if (!canEditQuiz(quiz)) throw new Error('Você só pode editar quizzes criados por você.');
-            return db.collection('quizzes').doc(editingTeacherQuizId).set(quizData, { merge: true });
+            return validateRoomOwnership().then(() =>
+                db.collection('quizzes').doc(editingTeacherQuizId).set(quizData, { merge: true })
+            );
         })
-        : db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+        : validateRoomOwnership().then(() =>
+            db.collection('quizzes').add({ ...quizData, createdAt: firebase.firestore.FieldValue.serverTimestamp() })
+        );
 
     request.then(() => {
         alert('Quiz salvo com sucesso!');
