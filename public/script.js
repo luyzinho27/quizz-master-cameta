@@ -2342,7 +2342,7 @@ function openTeacherQuizModal(quizId = null) {
 
             // Ajustar visibilidade do select dependendo do tipo de usuário
             if (isAdminUser()) {
-                adminRoomGroup.style.display = '';
+                adminRoomGroup.style.display = 'block';
                 roomSelect.style.display = 'none';
                 // Popular select de admin com todas as salas
                 fetchCollection('rooms').then(allRooms => {
@@ -2356,7 +2356,7 @@ function openTeacherQuizModal(quizId = null) {
                 });
             } else {
                 adminRoomGroup.style.display = 'none';
-                roomSelect.style.display = '';
+                roomSelect.style.display = 'block';
             }
 
             if (!quizId) return null;
