@@ -2330,6 +2330,8 @@ function openTeacherQuizModal(quizId = null) {
     Promise.all([populateCategorySelect('teacher-quiz-category'), getManagedRooms()])
         .then(([, rooms]) => {
             const roomSelect = document.getElementById('teacher-quiz-room');
+            const adminRoomGroup = document.getElementById('admin-quiz-room-group');
+            const adminRoomSelect = document.getElementById('admin-quiz-room');
             roomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
             rooms.filter(room => room.status !== 'inactive').forEach(room => {
                 const option = document.createElement('option');
@@ -2337,6 +2339,25 @@ function openTeacherQuizModal(quizId = null) {
                 option.textContent = room.name;
                 roomSelect.appendChild(option);
             });
+
+            // Ajustar visibilidade do select dependendo do tipo de usuário
+            if (isAdminUser()) {
+                adminRoomGroup.style.display = '';
+                roomSelect.style.display = 'none';
+                // Popular select de admin com todas as salas
+                fetchCollection('rooms').then(allRooms => {
+                    adminRoomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
+                    allRooms.filter(r => r.status !== 'inactive').forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.id;
+                        opt.textContent = r.name;
+                        adminRoomSelect.appendChild(opt);
+                    });
+                });
+            } else {
+                adminRoomGroup.style.display = 'none';
+                roomSelect.style.display = '';
+            }
 
             if (!quizId) return null;
             return db.collection('quizzes').doc(quizId).get().then(doc => {
@@ -2346,7 +2367,11 @@ function openTeacherQuizModal(quizId = null) {
                 setValue('teacher-quiz-title', quiz.title);
                 setValue('teacher-quiz-description', quiz.description || '');
                 setValue('teacher-quiz-category', quiz.category || '');
-                setValue('teacher-quiz-room', quiz.roomId || '');
+                if (isAdminUser()) {
+                    setValue('admin-quiz-room', quiz.roomId || '');
+                } else {
+                    setValue('teacher-quiz-room', quiz.roomId || '');
+                }
                 setValue('teacher-quiz-questions-count', quiz.questionsCount || '');
                 setValue('teacher-quiz-time', quiz.time || '');
                 setValue('teacher-quiz-status', quiz.status || 'active');
@@ -2366,7 +2391,7 @@ function saveTeacherQuiz() {
     if (!canManageTeacherResources()) return alert('Acesso negado.');
     const title = getValue('teacher-quiz-title');
     const category = getValue('teacher-quiz-category');
-    const roomId = getValue('teacher-quiz-room');
+    const roomId = isAdminUser() ? getValue('admin-quiz-room') : getValue('teacher-quiz-room');
     const questionsCount = Number(getValue('teacher-quiz-questions-count'));
     const time = Number(getValue('teacher-quiz-time'));
 

@@ -1551,6 +1551,11 @@
                     <label for="teacher-quiz-room">Sala</label>
                     <select id="teacher-quiz-room" required></select>
                 </div>
+                <!-- Select para administradores (exibido apenas quando usuário é admin) -->
+                <div class="input-group" id="admin-quiz-room-group" style="display:none;">
+                    <label for="admin-quiz-room">Sala (Admin)</label>
+                    <select id="admin-quiz-room" required></select>
+                </div>
                 <div class="input-group">
                     <label for="teacher-quiz-questions-count">Número de Questões</label>
                     <input type="number" id="teacher-quiz-questions-count" min="1" max="50" placeholder="Número de questões">
