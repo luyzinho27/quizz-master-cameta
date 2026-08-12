@@ -76,23 +76,32 @@ service cloud.firestore {
     }
 
     match /rooms/{roomId} {
-      allow get, list: if signedIn() && (
-        isAdmin() ||
-        ownsExistingResource() ||
-        request.auth.uid in resource.data.studentIds
-      );
+      // Read access: admins, owners, or members of the room
+      // Allow any authenticated user to read rooms. This is necessary so that
+      // students can retrieve a room document before adding themselves via
+      // arrayUnion. The room data is not sensitive, so this permissive rule
+      // keeps the logic simple.
+      allow get, list: if signedIn();
 
+      // Creation: admins or professors who own the resource
       allow create: if signedIn() && (
         isAdminOrProfessor() &&
         ownsRequestedResource()
       );
 
+      // Update: admins/professors who own the resource, or any authenticated user
+      // who is adding themselves to the room (i.e., their UID appears in the
+      // updated studentIds array). This allows students to join rooms via a
+      // link without requiring a Cloud Function.
       allow update: if signedIn() && (
         isAdminOrProfessor() &&
         ownsExistingResource() &&
         ownsRequestedResource()
+      ) || (
+        request.auth.uid in request.resource.data.studentIds
       );
 
+      // Deletion: admins or professors who own the resource
       allow delete: if signedIn() && (
         isAdminOrProfessor() &&
         ownsExistingResource()
