@@ -1994,7 +1994,13 @@ function loadInitialDashboardData() {
 
     if (currentUser.userType === 'aluno') {
         setText('student-name', currentUser.name || currentUser.email || '');
-        loadQuizzes().then(() => attemptStartQuizFromLink());
+        // Primeiro tenta iniciar o quiz via link. Se não houver link ou o
+        // aluno já estiver em uma sala, apenas carrega a lista de quizzes.
+        attemptStartQuizFromLink().then(started => {
+            if (!started) {
+                loadQuizzes();
+            }
+        });
         return;
     }
 
