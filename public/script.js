@@ -951,6 +951,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 currentUser = { ...user, ...userData };
                 hideLoading();
                 showDashboard();
+                // Se houver um link de quiz na URL, iniciar automaticamente
+                attemptStartQuizFromLink();
             }).catch(error => {
                 hideLoading();
                 console.error('Erro ao carregar dados do usuário:', error);
