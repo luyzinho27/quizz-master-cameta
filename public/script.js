@@ -2998,6 +2998,8 @@ function closeQuestionModal() {
 
 function saveQuestion() {
     if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
+    const imageInput = document.getElementById('question-image');
+    const imageFile = imageInput && imageInput.files[0];
     const data = {
         text: getValue('question-text'),
         category: getValue('question-category') || 'Geral',
@@ -3015,6 +3017,12 @@ function saveQuestion() {
         return alert('Preencha o enunciado e todas as alternativas.');
     }
 
+    const uploadImage = imageFile ? () => {
+        const storageRef = firebase.storage().ref();
+        const imageRef = storageRef.child(`question-images/${editingQuestionId || 'temp'}/${imageFile.name}`);
+        return imageRef.put(imageFile).then(() => imageRef.getDownloadURL());
+    } : () => Promise.resolve(null);
+
     const request = editingQuestionId
         ? db.collection('questions').doc(editingQuestionId).get().then(doc => {
             if (!doc.exists) throw new Error('Questão não encontrada.');
@@ -3022,12 +3030,20 @@ function saveQuestion() {
             if (!canEditQuestion(question)) {
                 throw new Error('Você só pode editar questões criadas por você.');
             }
-            return db.collection('questions').doc(editingQuestionId).set(data, { merge: true });
+            return uploadImage().then(url => {
+                if (url) data.imageUrl = url;
+                return db.collection('questions').doc(editingQuestionId).set(data, { merge: true });
+            });
         })
         : db.collection('questions').add({
             ...data,
             ...getOwnerPayload(),
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).then(ref => {
+            return uploadImage().then(url => {
+                if (url) return ref.update({ imageUrl: url });
+                return ref;
+            });
         });
 
     request.then(() => {
