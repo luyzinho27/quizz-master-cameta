@@ -1954,7 +1954,7 @@ function ensureAdminTeacherTabs() {
         roomsSection.innerHTML = `
             <div class="section-header">
                 <h2>Gerenciar Salas</h2>
-                <p>Crie
+                <p>Crie turmas, adicione alunos e organize quizzes por sala</p>
                 <button id="admin-create-room-btn" class="btn btn-primary">
                     <i class="fas fa-plus"></i>
                     <span class="btn-text">Criar Sala</span>
@@ -1967,31 +1967,6 @@ function ensureAdminTeacherTabs() {
     }
 
 }
-
-// Add room-selector population logic
-function populateAdminRoomSelector() {
-    const roomSelect = document.getElementById('admin-room-select');
-    if (!roomSelect) return;
-
-    // Fetch available rooms from Firebase
-    db.collection('rooms').get().then(snapshot => {
-        const rooms = snapshot.docs.map(doc => doc.data());
-
-        // Clear existing options
-        roomSelect.innerHTML = '';
-
-        // Add room options
-        rooms.forEach(room => {
-            const option = document.createElement('option');
-            option.value = room.id;
-            option.textContent = room.name || room.id;
-            roomSelect.appendChild(option);
-        });
-    });
-}
-
-// Initialize room selector when DOM loads
-document.addEventListener('DOMContentLoaded', populateAdminRoomSelector);
 
 function updateRegisterAdminOption() {
     const adminOption = document.getElementById('admin-option');
@@ -2401,16 +2376,6 @@ function openTeacherQuizModal(quizId = null) {
                 setValue('teacher-quiz-time', quiz.time || '');
                 setValue('teacher-quiz-status', quiz.status || 'active');
                 setChecked('teacher-allow-review', quiz.allowReview !== false);
-                if (quiz.visibility === 'specific') {
-                    document.getElementById('specific-students-container').classList.remove('hidden');
-                    selectedStudents = [];
-                    loadAvailableStudents('available-students-list', quiz.allowedStudents || []).then(students => {
-                        selectedStudents = students
-                            .filter(student => (quiz.allowedStudents || []).includes(student.id))
-                            .map(student => ({ id: student.id, name: student.name || student.email }));
-                        updateSelectedStudentsDisplay();
-                    });
-                }
             });
         })
         .then(() => document.getElementById('teacher-quiz-modal').classList.remove('hidden'))
@@ -2532,7 +2497,7 @@ function loadTeacherQuizzes() {
     return Promise.all([getManagedRooms(), fetchOwnedQuizzesForCurrentUser()])
         .then(([rooms, quizzes]) => {
             const roomIds = rooms.map(room => room.id);
-            const visible = quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds));
+            const visible = firebaseOrderByCreatedDesc(quizzes.filter(quiz => quizVisibleForCurrentTeacher(quiz, roomIds)));
             teacherQuizzesCache = visible;
             renderTeacherQuizzes('teacher-quizzes-list', visible, rooms);
         })
@@ -2630,7 +2595,7 @@ function saveTeacherUser() {
         db.collection('users').doc(editingTeacherUserId).set(userData, { merge: true }).then(() => {
             if (isOwnProfile) {
                 currentUser = { ...currentUser, name, email, status };
-                setText('admin-name', name || email);
+                setText('teacher-name', name || email);
             }
             alert(isOwnProfile ? 'Cadastro atualizado com sucesso!' : 'Aluno atualizado com sucesso!');
             finish();
@@ -2794,18 +2759,10 @@ function toggleUserStatus(userId, status) {
 }
 
 function deleteUser(userId) {
-    return db.collection('users').doc(userId).get()
-        .then(doc => {
-            if (!doc.exists) throw new Error('Usuário não encontrado.');
-            const user = { id: doc.id, ...doc.data() };
-            if (!isAdminUser() && !canEditOwnedResource(user)) {
-                throw new Error('Você só pode excluir usuários que você criou.');
-            }
-            if (!confirm('Tem certeza que deseja excluir este usuário do Firestore?')) return false;
-            return db.collection('users').doc(userId).delete();
-        })
-        .then(deleted => {
-            if (deleted === false) return;
+    if (!isAdminUser()) return alert('Apenas administradores podem excluir usuários.');
+    if (!confirm('Tem certeza que deseja excluir este usuário do Firestore?')) return;
+    db.collection('users').doc(userId).delete()
+        .then(() => {
             alert('Usuário excluído com sucesso!');
             isAdminUser() ? loadAdminUsers() : loadTeacherUsers();
         })
@@ -3463,3 +3420,50 @@ function loadReports(containerId) {
             setListEmpty(containerId, 'Erro ao carregar relatórios.');
         });
 }
+
+window.openRoomModal = openRoomModal;
+window.closeRoomModal = closeRoomModal;
+window.saveRoom = saveRoom;
+window.loadTeacherRooms = loadTeacherRooms;
+window.loadAdminRooms = loadAdminRooms;
+window.openTeacherQuizModal = openTeacherQuizModal;
+window.closeTeacherQuizModal = closeTeacherQuizModal;
+window.saveTeacherQuiz = saveTeacherQuiz;
+window.loadTeacherQuizzes = loadTeacherQuizzes;
+window.openTeacherUserModal = openTeacherUserModal;
+window.closeTeacherUserModal = closeTeacherUserModal;
+window.saveTeacherUser = saveTeacherUser;
+window.loadTeacherUsers = loadTeacherUsers;
+window.loadAdminUsers = loadAdminUsers;
+window.openUserModal = openUserModal;
+window.closeUserModal = closeUserModal;
+window.saveUser = saveUser;
+window.loadAdminQuizzes = loadAdminQuizzes;
+window.openQuizModal = openQuizModal;
+window.closeQuizModal = closeQuizModal;
+window.saveQuiz = saveQuiz;
+window.loadAdminQuestions = loadAdminQuestions;
+window.loadTeacherQuestions = loadTeacherQuestions;
+window.openQuestionModal = openQuestionModal;
+window.closeQuestionModal = closeQuestionModal;
+window.saveQuestion = saveQuestion;
+window.openImportModal = openImportModal;
+window.closeImportModal = closeImportModal;
+window.importQuestions = importQuestions;
+window.loadQuizzes = loadQuizzes;
+window.startQuiz = startQuiz;
+window.loadQuizQuestions = loadQuizQuestions;
+window.displayQuestion = displayQuestion;
+window.selectAnswer = selectAnswer;
+window.finishQuiz = finishQuiz;
+window.handleReviewClick = handleReviewClick;
+window.closeReviewModal = closeReviewModal;
+window.loadRanking = loadRanking;
+window.loadAdminRanking = loadAdminRanking;
+window.loadTeacherRanking = loadTeacherRanking;
+window.loadQuizRankings = loadQuizRankings;
+window.loadAdminQuizRankings = loadAdminQuizRankings;
+window.loadTeacherQuizRankings = loadTeacherQuizRankings;
+window.loadUserHistory = loadUserHistory;
+window.loadAdminReports = loadAdminReports;
+window.loadTeacherReports = loadTeacherReports;

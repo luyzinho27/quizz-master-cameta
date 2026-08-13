@@ -39,9 +39,9 @@ body {
     overflow-x: hidden;
 }
 
-.hidden {
-    display: none !important;
-}
+ .hidden {
+     display: none;
+ }
 
 /* Loading */
 .loading {
