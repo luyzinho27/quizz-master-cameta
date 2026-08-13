@@ -1311,6 +1311,12 @@
                         <option value="specific">Alunos Específicos</option>
                     </select>
                 </div>
+
+                <!-- Select para administradores (exibido apenas quando usuário é admin) -->
+                <div class="input-group" id="admin-quiz-room-group" style="display:none;">
+                    <label for="admin-quiz-room">Sala (Admin) <span style="color: var(--danger-color)">*</span></label>
+                    <select id="admin-quiz-room" required></select>
+                </div>
                 
                 <div id="specific-students-container" class="hidden">
                     <div class="input-group">

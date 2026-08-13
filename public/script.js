@@ -2782,6 +2782,18 @@ function openQuizModal(quizId = null) {
     updateSelectedStudentsDisplay();
 
     populateCategorySelect('quiz-category').then(() => {
+        // Populate admin room selector
+        fetchCollection('rooms').then(rooms => {
+            const adminRoomSelect = document.getElementById('admin-quiz-room');
+            adminRoomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
+            rooms.filter(r => r.status !== 'inactive').forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r.id;
+                opt.textContent = r.name;
+                adminRoomSelect.appendChild(opt);
+            });
+            document.getElementById('admin-quiz-room-group').style.display = 'block';
+        });
         if (!quizId) return null;
         return db.collection('quizzes').doc(quizId).get().then(doc => {
             if (!doc.exists) throw new Error('Quiz não encontrado.');
@@ -2805,6 +2817,8 @@ function openQuizModal(quizId = null) {
                     updateSelectedStudentsDisplay();
                 });
             }
+            // Set admin room if present
+            setValue('admin-quiz-room', quiz.roomId || '');
         });
     }).then(() => document.getElementById('quiz-modal').classList.remove('hidden'))
       .catch(error => alert('Erro ao abrir quiz: ' + getAuthErrorMessage(error)));
@@ -2820,6 +2834,7 @@ function saveQuiz() {
     if (!isAdminUser()) return alert('Apenas administradores podem gerenciar quizzes globais.');
     const visibility = getValue('quiz-visibility') || 'all';
     const selectedIds = visibility === 'specific' ? selectedStudentIdsFrom('available-students-list') : [];
+    const roomId = getValue('admin-quiz-room');
     const quizData = {
         title: getValue('quiz-title'),
         description: getValue('quiz-description'),
@@ -2829,14 +2844,15 @@ function saveQuiz() {
         status: getValue('quiz-status') || 'active',
         visibility,
         allowedStudents: selectedIds,
+        roomId,
         allowReview: document.getElementById('allow-review').checked,
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         ownerType: 'admin',
         ownerId: currentUser.uid
     };
 
-    if (!quizData.title || !quizData.category || !quizData.questionsCount || !quizData.time) {
-        return alert('Preencha título, categoria, número de questões e tempo.');
+    if (!quizData.title || !quizData.category || !quizData.questionsCount || !quizData.time || !roomId) {
+        return alert('Preencha título, categoria, número de questões, tempo e sala.');
     }
     if (visibility === 'specific' && selectedIds.length === 0) {
         return alert('Selecione pelo menos um aluno.');
