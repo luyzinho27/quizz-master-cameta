@@ -2786,7 +2786,7 @@ function openQuizModal(quizId = null) {
         fetchCollection('rooms').then(rooms => {
             const adminRoomSelect = document.getElementById('admin-quiz-room');
             adminRoomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
-            rooms.filter(r => r.status !== 'inactive').forEach(r => {
+            rooms.filter(r => r.status !== 'inactive' && r.ownerId === currentUser.uid).forEach(r => {
                 const opt = document.createElement('option');
                 opt.value = r.id;
                 opt.textContent = r.name;
