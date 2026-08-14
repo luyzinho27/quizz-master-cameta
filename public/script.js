@@ -2968,6 +2968,11 @@ function openQuestionModal(questionId = null) {
     setText('question-modal-title', questionId ? 'Editar Questão' : 'Adicionar Nova Questão');
     ['question-text', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
     setValue('correct-answer', 'a');
+    // Reset image preview and input when opening modal
+    const imagePreview = document.getElementById('question-image-preview');
+    if (imagePreview) imagePreview.innerHTML = '';
+    const imageInput = document.getElementById('question-image');
+    if (imageInput) imageInput.value = '';
 
     if (!questionId) {
         document.getElementById('question-modal').classList.remove('hidden');
@@ -2981,6 +2986,9 @@ function openQuestionModal(questionId = null) {
             throw new Error('Você só pode editar questões criadas por você.');
         }
         setValue('question-text', question.text || '');
+        // Ensure textarea displays the text correctly
+        const textarea = document.getElementById('question-text');
+        if (textarea) textarea.innerText = question.text || '';
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
         setValue('option-b', question.options?.b || '');
@@ -3051,6 +3059,24 @@ function saveQuestion() {
         closeQuestionModal();
         refreshQuestionsLists();
     }).catch(error => alert('Erro ao salvar questão: ' + getAuthErrorMessage(error)));
+}
+// Preview image when selecting a file for a question
+const questionImageInput = document.getElementById('question-image');
+if (questionImageInput) {
+    questionImageInput.addEventListener('change', () => {
+        const file = questionImageInput.files[0];
+        const preview = document.getElementById('question-image-preview');
+        if (!preview) return;
+        if (!file) {
+            preview.innerHTML = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = e => {
+            preview.innerHTML = `<img src="${e.target.result}" alt="Preview" style="max-width:100%;">`;
+        };
+        reader.readAsDataURL(file);
+    });
 }
 
 function getQuestionOwnerLabel(question) {
