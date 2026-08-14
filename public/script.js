@@ -2989,7 +2989,7 @@ function openQuestionModal(questionId = null) {
         setValue('question-text', enunciado);
         // Ensure textarea displays the text correctly
         const textarea = document.getElementById('question-text');
-        if (textarea) textarea.innerText = enunciado;
+        if (textarea) textarea.value = enunciado;
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
         setValue('option-b', question.options?.b || '');
