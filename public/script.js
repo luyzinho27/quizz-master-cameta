@@ -3027,9 +3027,20 @@ function saveQuestion() {
     }
 
     const uploadImage = imageFile ? () => {
-        const storageRef = firebase.storage().ref();
-        const imageRef = storageRef.child(`question-images/${editingQuestionId || 'temp'}/${imageFile.name}`);
-        return imageRef.put(imageFile).then(() => imageRef.getDownloadURL());
+        // Upload to Cloudinary instead of Firebase Storage
+        const cloudName = 'rtolp34j'; // replace with your Cloudinary cloud name
+        const uploadPreset = 'quizmaster'; // replace with your unsigned upload preset
+        // const apiKey = '123456789012345';        // (opcional) API Key se quiser usar uploads signed
+        const url = `https://api.cloudinary.com/v1_1/${cloudName}/upload`;
+        const formData = new FormData();
+        formData.append('file', imageFile);
+        formData.append('upload_preset', uploadPreset);
+        return fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => data.secure_url);
     } : () => Promise.resolve(null);
 
     const request = editingQuestionId
