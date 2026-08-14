@@ -34,6 +34,8 @@ const authPersistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.
     });
 
 // Estado da aplicação
+// Global variable for MathQuill field
+let mathField = null;
 let currentUser = null;
 let currentQuiz = null;
 let currentQuestions = [];
@@ -678,7 +680,7 @@ function startQuiz(quizId, options = {}) {
 function displayQuestion() {
     if (!currentQuestions.length) return;
     const question = currentQuestions[currentQuestionIndex];
-    setText('question-title', question.text || 'Questão sem enunciado.');
+    setText('question-title', katex.renderToString(question.text || 'Questão sem enunciado.', { throwOnError: false }));
     setText('option-a-text', question.options?.a || '');
     setText('option-b-text', question.options?.b || '');
     setText('option-c-text', question.options?.c || '');
@@ -826,7 +828,7 @@ function handleReviewClick() {
                     <span class="card-badge ${isCorrect ? '' : 'card-badge-secondary'}">${isCorrect ? 'Correta' : 'Incorreta'}</span>
                 </div>
                 <div class="card-content">
-                    <p>${escapeHtml(question.text || '')}</p>
+                    <p>${katex.renderToString(question.text || '', { throwOnError: false })}</p>
                     <p><strong>Sua resposta:</strong> ${escapeHtml(userAnswer.toUpperCase())}</p>
                     <p><strong>Resposta correta:</strong> ${escapeHtml(correctAnswer.toUpperCase())}</p>
                 </div>
@@ -963,6 +965,21 @@ document.addEventListener('DOMContentLoaded', function() {
     initAuth();
     initEventListeners();
     initModals();
+    // Initialize MathQuill editor for question modal
+    const MQ = MathQuill.getInterface(2);
+    const mathContainer = document.getElementById('question-mathquill');
+    if (mathContainer) {
+        mathField = MQ.MathField(mathContainer, {
+            spaceBehavesLikeTab: true,
+            handlers: {
+                edit: function() {
+                    const latex = mathField.latex();
+                    const hidden = document.getElementById('question-latex');
+                    if (hidden) hidden.value = latex;
+                }
+            }
+        });
+    }
 
     // Verificar se há um usuário logado
     auth.onAuthStateChanged(user => {
@@ -2996,7 +3013,9 @@ function openQuestionModal(questionId = null) {
     if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
     editingQuestionId = questionId;
     setText('question-modal-title', questionId ? 'Editar Questão' : 'Adicionar Nova Questão');
-    ['question-textarea', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
+    ['question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
+    const hidden = document.getElementById('question-latex');
+    if (hidden) hidden.value = '';
     setValue('correct-answer', 'a');
     // Reset image preview and input when opening modal
     const imagePreview = document.getElementById('question-image-preview');
@@ -3016,10 +3035,9 @@ function openQuestionModal(questionId = null) {
             throw new Error('Você só pode editar questões criadas por você.');
         }
         const enunciado = question.text || question.enunciado || '';
-        setValue('question-textarea', enunciado);
-        // Ensure textarea displays the text correctly
-        const textarea = document.getElementById('question-textarea');
-        if (textarea) textarea.value = enunciado;
+        const hidden = document.getElementById('question-latex');
+        if (hidden) hidden.value = enunciado;
+        if (mathField) mathField.latex(enunciado);
         // Load image preview if exists
         const preview = document.getElementById('question-image-preview');
         if (preview && question.imageUrl) {
@@ -3045,7 +3063,7 @@ function saveQuestion() {
     const imageInput = document.getElementById('question-image');
     const imageFile = imageInput && imageInput.files[0];
     const data = {
-        text: getValue('question-textarea'),
+        text: getValue('question-latex'),
         category: getValue('question-category') || 'Geral',
         options: {
             a: getValue('option-a'),
@@ -3141,7 +3159,7 @@ function renderQuestions(listId, questions) {
     list.innerHTML = questions.map(question => `
         <div class="card question-card">
             <div class="card-header">
-                <h3 class="card-title">${escapeHtml((question.text || '').slice(0, 90))}</h3>
+                <h3 class="card-title">${katex.renderToString((question.text || '').slice(0, 90), { throwOnError: false })}</h3>
                 <span class="card-badge">${escapeHtml(question.category || 'Geral')}</span>
             </div>
             <div class="card-content">

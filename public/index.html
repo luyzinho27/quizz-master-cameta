@@ -1363,7 +1363,10 @@
             <div class="modal-body">
                 <div class="input-group">
                     <label for="question-text">Enunciado da Questão</label>
-                    <textarea id="question-textarea" placeholder="Digite o enunciado da questão" rows="3"></textarea>
+                    <!-- MathQuill editor container -->
+                    <div id="question-mathquill" style="border:1px solid #ccc; padding:0.5rem; min-height:80px;"></div>
+                    <!-- Hidden textarea to store LaTeX string for persistence -->
+                    <textarea id="question-latex" class="hidden" style="display:none;"></textarea>
                 </div>
                 <div class="input-group">
                     <label for="question-image">Imagem da Questão (opcional)</label>
@@ -1639,6 +1642,14 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- KaTeX CSS for rendering LaTeX -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.css">
+    <!-- MathQuill CSS for the editor -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.css">
+    <!-- KaTeX JS for rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.4/dist/katex.min.js"></script>
+    <!-- MathQuill JS for the editor -->
+    <script src="https://cdn.jsdelivr.net/npm/mathquill@0.10.1/build/mathquill.js"></script>
     <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
