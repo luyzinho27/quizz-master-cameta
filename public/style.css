@@ -43,6 +43,17 @@ body {
     display: none !important;
 }
 
+/* Image preview container used in quiz view and question modal */
+.image-preview {
+    margin-top: 1rem;
+    text-align: center;
+}
+.image-preview img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
 /* Loading */
 .loading {
     position: fixed;

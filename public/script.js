@@ -661,6 +661,9 @@ function startQuiz(quizId, options = {}) {
     });
 }
 
+// Removed duplicate displayQuestion implementation.
+
+// Updated displayQuestion to render the image for the current question.
 function displayQuestion() {
     if (!currentQuestions.length) return;
     const question = currentQuestions[currentQuestionIndex];
@@ -689,7 +692,23 @@ function displayQuestion() {
     if (nextButton) nextButton.classList.toggle('hidden', currentQuestionIndex >= currentQuestions.length - 1);
     if (finishButton) finishButton.classList.toggle('hidden', currentQuestionIndex < currentQuestions.length - 1);
 
+    // Render the image for this question.
+    renderQuestionImage(question);
+
     saveQuizStateLocal({ active: true });
+}
+
+// Render the image associated with the current question, if any.
+// The image URL is stored in question.imageUrl and is expected to be a full URL.
+// We do not escape the URL because it is a trusted source (Cloudinary).
+function renderQuestionImage(question) {
+    const imageDisplay = document.getElementById('question-image-display');
+    if (!imageDisplay) return;
+    if (question && question.imageUrl) {
+        imageDisplay.innerHTML = `<img src="${question.imageUrl}" alt="Imagem da questão" style="max-width:100%;">`;
+    } else {
+        imageDisplay.innerHTML = '';
+    }
 }
 
 function selectAnswer(answer) {
