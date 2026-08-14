@@ -34,8 +34,6 @@ const authPersistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.
     });
 
 // Estado da aplicação
-// Global variable for MathQuill field
-let mathField = null;
 let currentUser = null;
 let currentQuiz = null;
 let currentQuestions = [];
@@ -461,12 +459,6 @@ function getVisibleStudentQuizzes() {
 function resumeQuizFromAttempt(quiz, attempt) {
     currentQuiz = quiz;
     userQuizId = attempt.id;
-
-    // Determine if the quiz has been updated after the attempt was created.
-    const quizUpdatedAtMs = getTimestampMs(quiz.updatedAt);
-    const attemptUpdatedAtMs = getTimestampMs(attempt.updatedAt);
-    const useOldQuestionIds = !quizUpdatedAtMs || !attemptUpdatedAtMs || quizUpdatedAtMs <= attemptUpdatedAtMs;
-
     currentQuestionIndex = Number(attempt.currentQuestionIndex || 0);
     userAnswers = Array.isArray(attempt.answers) ? attempt.answers : [];
     exitCount = Number(attempt.exitCount || 0);
@@ -474,14 +466,9 @@ function resumeQuizFromAttempt(quiz, attempt) {
     timeRemaining = typeof attempt.timeRemaining === 'number' ? Math.max(0, attempt.timeRemaining) : totalTime;
     quizStartTime = Date.now();
 
-    // If the quiz was updated after the attempt, ignore the stored question IDs and answers.
-    if (!useOldQuestionIds) {
-        currentQuestionIndex = 0;
-    }
-
     return loadQuizQuestions(quiz.id, {
-        questionIds: useOldQuestionIds ? (attempt.questionIds || []) : [],
-        preserveAnswers: useOldQuestionIds,
+        questionIds: attempt.questionIds || [],
+        preserveAnswers: true,
         resume: true
     });
 }
@@ -680,7 +667,7 @@ function startQuiz(quizId, options = {}) {
 function displayQuestion() {
     if (!currentQuestions.length) return;
     const question = currentQuestions[currentQuestionIndex];
-    setText('question-title', katex.renderToString(question.text || 'Questão sem enunciado.', { throwOnError: false }));
+    setText('question-title', question.text || 'Questão sem enunciado.');
     setText('option-a-text', question.options?.a || '');
     setText('option-b-text', question.options?.b || '');
     setText('option-c-text', question.options?.c || '');
@@ -828,7 +815,7 @@ function handleReviewClick() {
                     <span class="card-badge ${isCorrect ? '' : 'card-badge-secondary'}">${isCorrect ? 'Correta' : 'Incorreta'}</span>
                 </div>
                 <div class="card-content">
-                    <p>${katex.renderToString(question.text || '', { throwOnError: false })}</p>
+                    <p>${escapeHtml(question.text || '')}</p>
                     <p><strong>Sua resposta:</strong> ${escapeHtml(userAnswer.toUpperCase())}</p>
                     <p><strong>Resposta correta:</strong> ${escapeHtml(correctAnswer.toUpperCase())}</p>
                 </div>
@@ -928,11 +915,36 @@ function resumeQuizFromState(quiz, localState) {
 
             userQuizId = doc.id;
 
-            const questionIds = Array.isArray(base.questionIds) && base.questionIds.length
+            const storedQuestionIds = Array.isArray(base.questionIds) && base.questionIds.length
                 ? base.questionIds
                 : (Array.isArray(fallback.questionIds) ? fallback.questionIds : []);
 
-            return loadQuizQuestions(quiz.id, { questionIds, preserveAnswers: true, resume: true });
+            // Compare stored question IDs with current quiz's question IDs
+            const currentQuestionIds = Array.isArray(userQuiz.questionIds) && userQuiz.questionIds.length
+                ? userQuiz.questionIds
+                : [];
+            const idsMatch = storedQuestionIds.length === currentQuestionIds.length &&
+                storedQuestionIds.every((id, idx) => id === currentQuestionIds[idx]) &&
+                (quiz.questionsCount == null || quiz.questionsCount === currentQuestionIds.length);
+
+            if (!idsMatch) {
+                // Load fresh questions based on current quiz configuration
+                return loadQuizQuestions(quiz.id, { preserveAnswers: true, resume: true })
+                    .then(() => {
+                        // Update userQuiz document with new question IDs and adjust answers array
+                        const newQuestionIds = currentQuestions.map(q => q.id);
+                        const newAnswers = userAnswers.slice(0, newQuestionIds.length);
+                        return db.collection('userQuizzes').doc(userQuizId).set({
+                            questionIds: newQuestionIds,
+                            answers: newAnswers,
+                            currentQuestionIndex: Math.min(currentQuestionIndex, newQuestionIds.length - 1),
+                            timeRemaining,
+                            exitCount,
+                        }, { merge: true });
+                    });
+            }
+
+            return loadQuizQuestions(quiz.id, { questionIds: storedQuestionIds, preserveAnswers: true, resume: true });
         })
         .catch(error => {
             console.error('Erro ao retomar quiz:', error);
@@ -965,21 +977,6 @@ document.addEventListener('DOMContentLoaded', function() {
     initAuth();
     initEventListeners();
     initModals();
-    // Initialize MathQuill editor for question modal
-    const MQ = MathQuill.getInterface(2);
-    const mathContainer = document.getElementById('question-mathquill');
-    if (mathContainer) {
-        mathField = MQ.MathField(mathContainer, {
-            spaceBehavesLikeTab: true,
-            handlers: {
-                edit: function() {
-                    const latex = mathField.latex();
-                    const hidden = document.getElementById('question-latex');
-                    if (hidden) hidden.value = latex;
-                }
-            }
-        });
-    }
 
     // Verificar se há um usuário logado
     auth.onAuthStateChanged(user => {
@@ -3013,9 +3010,7 @@ function openQuestionModal(questionId = null) {
     if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
     editingQuestionId = questionId;
     setText('question-modal-title', questionId ? 'Editar Questão' : 'Adicionar Nova Questão');
-    ['question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
-    const hidden = document.getElementById('question-latex');
-    if (hidden) hidden.value = '';
+    ['question-textarea', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
     setValue('correct-answer', 'a');
     // Reset image preview and input when opening modal
     const imagePreview = document.getElementById('question-image-preview');
@@ -3035,9 +3030,10 @@ function openQuestionModal(questionId = null) {
             throw new Error('Você só pode editar questões criadas por você.');
         }
         const enunciado = question.text || question.enunciado || '';
-        const hidden = document.getElementById('question-latex');
-        if (hidden) hidden.value = enunciado;
-        if (mathField) mathField.latex(enunciado);
+        setValue('question-textarea', enunciado);
+        // Ensure textarea displays the text correctly
+        const textarea = document.getElementById('question-textarea');
+        if (textarea) textarea.value = enunciado;
         // Load image preview if exists
         const preview = document.getElementById('question-image-preview');
         if (preview && question.imageUrl) {
@@ -3063,7 +3059,7 @@ function saveQuestion() {
     const imageInput = document.getElementById('question-image');
     const imageFile = imageInput && imageInput.files[0];
     const data = {
-        text: getValue('question-latex'),
+        text: getValue('question-textarea'),
         category: getValue('question-category') || 'Geral',
         options: {
             a: getValue('option-a'),
@@ -3159,7 +3155,7 @@ function renderQuestions(listId, questions) {
     list.innerHTML = questions.map(question => `
         <div class="card question-card">
             <div class="card-header">
-                <h3 class="card-title">${katex.renderToString((question.text || '').slice(0, 90), { throwOnError: false })}</h3>
+                <h3 class="card-title">${escapeHtml((question.text || '').slice(0, 90))}</h3>
                 <span class="card-badge">${escapeHtml(question.category || 'Geral')}</span>
             </div>
             <div class="card-content">
