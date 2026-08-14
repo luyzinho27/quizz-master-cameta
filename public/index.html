@@ -1650,14 +1650,19 @@
     </div>
 
     <script>
-        window.MathJax = {
-            tex: {
-                processEscapes: true
-            },
-            startup: {
-                typeset: false
-            }
-        };
+            window.MathJax = {
+                tex: {
+                    processEscapes: true
+                },
+                chtml: {
+                    // Scale math to match surrounding font height for better
+                    // visual alignment when using a custom font size.
+                    matchFontHeight: true
+                },
+                startup: {
+                    typeset: false
+                }
+            };
     </script>
     <script src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
     <script src="config.js"></script>
