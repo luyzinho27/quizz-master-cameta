@@ -2990,6 +2990,11 @@ function openQuestionModal(questionId = null) {
         // Ensure textarea displays the text correctly
         const textarea = document.getElementById('question-textarea');
         if (textarea) textarea.value = enunciado;
+        // Load image preview if exists
+        const preview = document.getElementById('question-image-preview');
+        if (preview && question.imageUrl) {
+            preview.innerHTML = `<img src="${question.imageUrl}" alt="Imagem da questão" style="max-width:100%;">`;
+        }
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
         setValue('option-b', question.options?.b || '');
@@ -3115,6 +3120,7 @@ function renderQuestions(listId, questions) {
                 <p><strong>C:</strong> ${escapeHtml(question.options?.c || '')}</p>
                 <p><strong>D:</strong> ${escapeHtml(question.options?.d || '')}</p>
                 <p><strong>Resposta:</strong> ${(question.correctAnswer || '').toUpperCase()}</p>
+                ${question.imageUrl ? `<p><img src="${escapeHtml(question.imageUrl)}" alt="Imagem da questão" style="max-width:100%;"></p>` : ''}
                 <p><strong>Criada por:</strong> ${escapeHtml(getQuestionOwnerLabel(question))}</p>
             </div>
             <div class="card-actions">
