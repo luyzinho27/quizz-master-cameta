@@ -2985,10 +2985,11 @@ function openQuestionModal(questionId = null) {
         if (!canEditQuestion(question)) {
             throw new Error('Você só pode editar questões criadas por você.');
         }
-        setValue('question-text', question.text || '');
+        const enunciado = question.text || question.enunciado || '';
+        setValue('question-text', enunciado);
         // Ensure textarea displays the text correctly
         const textarea = document.getElementById('question-text');
-        if (textarea) textarea.innerText = question.text || '';
+        if (textarea) textarea.innerText = enunciado;
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
         setValue('option-b', question.options?.b || '');
