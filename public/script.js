@@ -664,7 +664,7 @@ function startQuiz(quizId, options = {}) {
 function displayQuestion() {
     if (!currentQuestions.length) return;
     const question = currentQuestions[currentQuestionIndex];
-    setText('question-text', question.text || 'Questão sem enunciado.');
+    setText('question-title', question.text || 'Questão sem enunciado.');
     setText('option-a-text', question.options?.a || '');
     setText('option-b-text', question.options?.b || '');
     setText('option-c-text', question.options?.c || '');
@@ -2966,7 +2966,7 @@ function openQuestionModal(questionId = null) {
     if (!canManageQuestions()) return alert('Apenas administradores e professores podem gerenciar questões.');
     editingQuestionId = questionId;
     setText('question-modal-title', questionId ? 'Editar Questão' : 'Adicionar Nova Questão');
-    ['question-text', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
+    ['question-textarea', 'question-category', 'option-a', 'option-b', 'option-c', 'option-d'].forEach(id => setValue(id, ''));
     setValue('correct-answer', 'a');
     // Reset image preview and input when opening modal
     const imagePreview = document.getElementById('question-image-preview');
@@ -2986,9 +2986,9 @@ function openQuestionModal(questionId = null) {
             throw new Error('Você só pode editar questões criadas por você.');
         }
         const enunciado = question.text || question.enunciado || '';
-        setValue('question-text', enunciado);
+        setValue('question-textarea', enunciado);
         // Ensure textarea displays the text correctly
-        const textarea = document.getElementById('question-text');
+        const textarea = document.getElementById('question-textarea');
         if (textarea) textarea.value = enunciado;
         setValue('question-category', question.category || '');
         setValue('option-a', question.options?.a || '');
@@ -3010,7 +3010,7 @@ function saveQuestion() {
     const imageInput = document.getElementById('question-image');
     const imageFile = imageInput && imageInput.files[0];
     const data = {
-        text: getValue('question-text'),
+        text: getValue('question-textarea'),
         category: getValue('question-category') || 'Geral',
         options: {
             a: getValue('option-a'),
