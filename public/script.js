@@ -459,6 +459,12 @@ function getVisibleStudentQuizzes() {
 function resumeQuizFromAttempt(quiz, attempt) {
     currentQuiz = quiz;
     userQuizId = attempt.id;
+
+    // Determine if the quiz has been updated after the attempt was created.
+    const quizUpdatedAtMs = getTimestampMs(quiz.updatedAt);
+    const attemptUpdatedAtMs = getTimestampMs(attempt.updatedAt);
+    const useOldQuestionIds = !quizUpdatedAtMs || !attemptUpdatedAtMs || quizUpdatedAtMs <= attemptUpdatedAtMs;
+
     currentQuestionIndex = Number(attempt.currentQuestionIndex || 0);
     userAnswers = Array.isArray(attempt.answers) ? attempt.answers : [];
     exitCount = Number(attempt.exitCount || 0);
@@ -466,9 +472,14 @@ function resumeQuizFromAttempt(quiz, attempt) {
     timeRemaining = typeof attempt.timeRemaining === 'number' ? Math.max(0, attempt.timeRemaining) : totalTime;
     quizStartTime = Date.now();
 
+    // If the quiz was updated after the attempt, ignore the stored question IDs and answers.
+    if (!useOldQuestionIds) {
+        currentQuestionIndex = 0;
+    }
+
     return loadQuizQuestions(quiz.id, {
-        questionIds: attempt.questionIds || [],
-        preserveAnswers: true,
+        questionIds: useOldQuestionIds ? (attempt.questionIds || []) : [],
+        preserveAnswers: useOldQuestionIds,
         resume: true
     });
 }
