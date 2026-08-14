@@ -113,7 +113,7 @@
     <div id="student-dashboard" class="container hidden">
         <header class="dashboard-header">
             <div class="header-left">
-                <a href="#" class="brand-link" onclick="window.location.reload(); return false;">
+                <a href="#" id="auth-links-1" onclick="window.location.reload(); return false;">
                     <div class="logo">
                         <i class="fas fa-brain"></i>
                         <h1>QuizMaster</h1>
@@ -338,10 +338,6 @@
                                     <i class="fas fa-icons"></i>
                                     <span>Font Awesome</span>
                                 </div>
-                                <div class="tech-item">
-                                    <i class="fas fa-square-root-alt"></i>
-                                    <span>MathJax</span>
-                                </div>
                             </div>
                         </div>
 
@@ -411,7 +407,7 @@
     <div id="admin-dashboard" class="container hidden">
         <header class="dashboard-header">
             <div class="header-left">
-                <a href="#" class="brand-link" onclick="window.location.reload(); return false;">
+                <a href="#" id="auth-links-1" onclick="window.location.reload(); return false;">
                     <div class="logo">
                         <i class="fas fa-brain"></i>
                         <h1>QuizMaster</h1>
@@ -715,10 +711,6 @@
                                     <i class="fas fa-icons"></i>
                                     <span>Font Awesome</span>
                                 </div>
-                                <div class="tech-item">
-                                    <i class="fas fa-square-root-alt"></i>
-                                    <span>MathJax</span>
-                                </div>
                             </div>
                         </div>
 
@@ -788,7 +780,7 @@
     <div id="teacher-dashboard" class="container hidden">
         <header class="dashboard-header">
             <div class="header-left">
-                <a href="#" class="brand-link" onclick="window.location.reload(); return false;">
+                <a href="#" id="auth-links-1" onclick="window.location.reload(); return false;">
                     <div class="logo">
                         <i class="fas fa-brain"></i>
                         <h1>QuizMaster</h1>
@@ -1057,10 +1049,6 @@
                                     <i class="fas fa-icons"></i>
                                     <span>Font Awesome</span>
                                 </div>
-                                <div class="tech-item">
-                                    <i class="fas fa-square-root-alt"></i>
-                                    <span>MathJax</span>
-                                </div>
                             </div>
                         </div>
 
@@ -1162,6 +1150,7 @@
             <div id="question-container" class="question-container">
                 <div class="question-text-container">
                     <h2 id="question-title">Carregando questão...</h2>
+                    <div id="question-image-display" class="image-preview"></div>
                 </div>
                 <div id="options-container" class="options-container">
                     <div class="option" data-value="a">
@@ -1575,9 +1564,9 @@
                     <select id="teacher-quiz-room" required></select>
                 </div>
                 <!-- Select para administradores (exibido apenas quando usuário é admin) -->
-                <div class="input-group" id="teacher-admin-quiz-room-group" style="display:none;">
-                    <label for="teacher-admin-quiz-room">Sala (Admin)</label>
-                    <select id="teacher-admin-quiz-room" required></select>
+                <div class="input-group" id="admin-quiz-room-group" style="display:none;">
+                    <label for="admin-quiz-room">Sala (Admin)</label>
+                    <select id="admin-quiz-room" required></select>
                 </div>
                 <div class="input-group">
                     <label for="teacher-quiz-questions-count">Número de Questões</label>
@@ -1649,22 +1638,7 @@
         </div>
     </div>
 
-    <script>
-            window.MathJax = {
-                tex: {
-                    processEscapes: true
-                },
-                chtml: {
-                    // Scale math to match surrounding font height for better
-                    // visual alignment when using a custom font size.
-                    matchFontHeight: true
-                },
-                startup: {
-                    typeset: false
-                }
-            };
-    </script>
-    <script src="https://cdn.jsdelivr.net/npm/mathjax@4/tex-mml-chtml.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="config.js"></script>
     <script src="script.js"></script>
 </body>
