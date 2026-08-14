@@ -55,29 +55,16 @@ let quizProtectionEnabled = false;
 let quizShieldTimer = null;
 let quizPrintMediaQuery = null;
 let lastProgressSyncAt = 0;
-let reviewDataQuizId = null;
-let reviewDataUserQuizId = null;
 let editingRoomId = null;
 let editingTeacherQuizId = null;
 let editingTeacherUserId = null;
 let teacherRoomsCache = [];
-let currentUserPassword = null;
 
 const QUIZ_STATE_PREFIX = 'quizState:';
 const QUIZ_PROGRESS_SYNC_MS = 15000;
 const QUIZ_SHIELD_DURATION_MS = 1500;
 
-// Cache para dados de ranking (para permitir pesquisa)
-let cachedRankingData = {
-    student: { ranking: [], usersMap: {} },
-    admin: { ranking: [], usersMap: {} }
-};
-let cachedQuizRankingData = {
-    student: { quiz: null, results: [], usersMap: {} },
-    admin: { quiz: null, results: [], usersMap: {} }
-};
 let adminUsersCache = [];
-let teacherStudentsCache = [];
 let teacherQuizzesCache = [];
 let teacherUsersCache = [];
 let editingTeacherTargetUserType = 'aluno';
@@ -694,6 +681,7 @@ function displayQuestion() {
 
     // Render the image for this question.
     renderQuestionImage(question);
+    typesetMath(['#quiz-title-display', '#quiz-description-display', '#question-title', '#options-container']);
 
     saveQuizStateLocal({ active: true });
 }
@@ -824,6 +812,7 @@ function handleReviewClick() {
     }).join('');
 
     document.getElementById('review-modal').classList.remove('hidden');
+    typesetMath(content);
 }
 
 function closeReviewModal() {
@@ -974,7 +963,6 @@ function attemptAutoResumeQuiz() {
 
 // Inicializar a aplicação
 document.addEventListener('DOMContentLoaded', function() {
-    initAuth();
     initEventListeners();
     initModals();
 
@@ -1050,20 +1038,6 @@ function hideLoading() {
     loading.classList.add('hidden');
 }
 
-function setCurrentUserPassword(password) {
-    currentUserPassword = password || null;
-}
-
-function clearCurrentUserPassword() {
-    currentUserPassword = null;
-}
-
-
-function initAuth() {
-    console.log('Iniciando autenticação...');
-}
-// End of initAuth function
-// The following code initializes UI elements and event listeners
 const loginTab = document.getElementById('login-tab');
     const registerTab = document.getElementById('register-tab');
     const loginForm = document.getElementById('login-form');
@@ -1845,6 +1819,43 @@ function escapeHtml(value) {
         .replace(/'/g, '&#039;');
 }
 
+function normalizeMathTargets(targets) {
+    const list = Array.isArray(targets) ? targets : [targets];
+    return list.flatMap(target => {
+        if (!target) return [];
+        if (typeof target !== 'string') return [target];
+        return Array.from(document.querySelectorAll(target));
+    }).filter(Boolean);
+}
+
+function typesetMath(targets) {
+    if (typeof window === 'undefined' || !window.MathJax) return Promise.resolve();
+
+    const elements = normalizeMathTargets(targets);
+    if (!elements.length) return Promise.resolve();
+
+    const runTypeset = () => {
+        if (typeof window.MathJax.typesetPromise !== 'function') return Promise.resolve();
+        if (typeof window.MathJax.typesetClear === 'function') {
+            window.MathJax.typesetClear(elements);
+        }
+        return window.MathJax.typesetPromise(elements);
+    };
+
+    const handleError = error => {
+        console.warn('Erro ao renderizar formula matematica:', error);
+    };
+
+    if (window.MathJax.startup && window.MathJax.startup.promise) {
+        window.MathJax.startup.promise = window.MathJax.startup.promise
+            .then(runTypeset)
+            .catch(handleError);
+        return window.MathJax.startup.promise;
+    }
+
+    return runTypeset().catch(handleError);
+}
+
 function isAdminUser() {
     return currentUser && currentUser.userType === 'admin';
 }
@@ -2374,8 +2385,8 @@ function openTeacherQuizModal(quizId = null) {
     Promise.all([populateCategorySelect('teacher-quiz-category'), getManagedRooms()])
         .then(([, rooms]) => {
             const roomSelect = document.getElementById('teacher-quiz-room');
-            const adminRoomGroup = document.getElementById('admin-quiz-room-group');
-            const adminRoomSelect = document.getElementById('admin-quiz-room');
+            const adminRoomGroup = document.getElementById('teacher-admin-quiz-room-group');
+            const adminRoomSelect = document.getElementById('teacher-admin-quiz-room');
             roomSelect.innerHTML = '<option value="">Selecione uma sala</option>';
             rooms.filter(room => room.status !== 'inactive').forEach(room => {
                 const option = document.createElement('option');
@@ -2412,7 +2423,7 @@ function openTeacherQuizModal(quizId = null) {
                 setValue('teacher-quiz-description', quiz.description || '');
                 setValue('teacher-quiz-category', quiz.category || '');
                 if (isAdminUser()) {
-                    setValue('admin-quiz-room', quiz.roomId || '');
+                    setValue('teacher-admin-quiz-room', quiz.roomId || '');
                 } else {
                     setValue('teacher-quiz-room', quiz.roomId || '');
                 }
@@ -2435,7 +2446,7 @@ function saveTeacherQuiz() {
     if (!canManageTeacherResources()) return alert('Acesso negado.');
     const title = getValue('teacher-quiz-title');
     const category = getValue('teacher-quiz-category');
-    const roomId = isAdminUser() ? getValue('admin-quiz-room') : getValue('teacher-quiz-room');
+    const roomId = isAdminUser() ? getValue('teacher-admin-quiz-room') : getValue('teacher-quiz-room');
     const questionsCount = Number(getValue('teacher-quiz-questions-count'));
     const time = Number(getValue('teacher-quiz-time'));
 
@@ -3079,7 +3090,6 @@ function saveQuestion() {
         // Upload to Cloudinary instead of Firebase Storage
         const cloudName = 'rtolp34j'; // replace with your Cloudinary cloud name
         const uploadPreset = 'quizmaster'; // replace with your unsigned upload preset
-        // const apiKey = '123456789012345';        // (opcional) API Key se quiser usar uploads signed
         const url = `https://api.cloudinary.com/v1_1/${cloudName}/upload`;
         const formData = new FormData();
         formData.append('file', imageFile);
@@ -3176,6 +3186,7 @@ function renderQuestions(listId, questions) {
 
     addClickHandler(`#${listId} .question-edit`, event => openQuestionModal(event.currentTarget.dataset.id));
     addClickHandler(`#${listId} .question-delete`, event => deleteQuestion(event.currentTarget.dataset.id));
+    typesetMath(list);
 }
 
 function loadAdminQuestions() {
