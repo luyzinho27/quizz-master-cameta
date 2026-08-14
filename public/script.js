@@ -3120,7 +3120,7 @@ function renderQuestions(listId, questions) {
                 <p><strong>C:</strong> ${escapeHtml(question.options?.c || '')}</p>
                 <p><strong>D:</strong> ${escapeHtml(question.options?.d || '')}</p>
                 <p><strong>Resposta:</strong> ${(question.correctAnswer || '').toUpperCase()}</p>
-                ${question.imageUrl ? `<p><img src="${escapeHtml(question.imageUrl)}" alt="Imagem da questão" style="max-width:100%;"></p>` : ''}
+                ${question.imageUrl ? `<p><img src="${question.imageUrl}" alt="Imagem da questão" style="max-width:100%;"></p>` : ''}
                 <p><strong>Criada por:</strong> ${escapeHtml(getQuestionOwnerLabel(question))}</p>
             </div>
             <div class="card-actions">
