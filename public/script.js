@@ -5,7 +5,7 @@ function resolveFirebaseConfig() {
         return candidate;
     }
 
-    // Compatibilidade: permite que uma variavel global generica seja usada.
+    // Compatibilidade: permite que uma variavel global generica seja usada
     const legacy = window.firebaseConfig;
     if (legacy && typeof legacy === 'object') {
         return legacy;
