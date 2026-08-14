@@ -43,7 +43,7 @@ body {
     display: none !important;
 }
 
-/* Image preview container used in quiz view and question modal. */
+/* Image preview container used in quiz view and question modal */
 .image-preview {
     margin-top: 1rem;
     text-align: center;
