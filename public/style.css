@@ -874,6 +874,7 @@ body.quiz-shield-active .quiz-screenshot-shield {
 .question-text-container {
     min-height: 80px;
     display: flex;
+    flex-direction: column;
     align-items: center;
     margin-bottom: 1.5rem;
 }
