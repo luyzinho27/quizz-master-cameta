@@ -2377,7 +2377,7 @@ body.quiz-shield-active .quiz-screenshot-shield {
 /* 1. Alinha o checkbox e o rótulo à esquerda na modal de Termos  */
 #terms-modal .terms-checkbox-container {
     display: flex;                /* usa flexbox */
-    align-items: center;          /* mantém verticalmente alinhado */
+    /* align-items: center;          mantém verticalmente alinhado */
     justify-content: flex-start;    /* alinha à esquerda */
     gap: 8px;                      /* espaço opcional entre checkbox e texto */
     margin-left: 0;               /* garante que não haja margem centralizada */
@@ -2386,5 +2386,5 @@ body.quiz-shield-active .quiz-screenshot-shield {
 
 /* 2. Espaço entre o checkbox e o texto */
 #terms-modal .terms-checkbox-container input[type="checkbox"] {
-    margin-right: 8px;
+    margin-right: -8px;
 }
