@@ -2381,10 +2381,10 @@ body.quiz-shield-active .quiz-screenshot-shield {
     justify-content: flex-start;    /* alinha à esquerda */
     gap: 8px;                      /* espaço opcional entre checkbox e texto */
     margin-left: 0;               /* garante que não haja margem centralizada */
-    text-align: left;             /* força alinhamento à esquerda */
+    text-align: right;             /* força alinhamento à esquerda */
 }
 
 /* 2. Espaço entre o checkbox e o texto */
 #terms-modal .terms-checkbox-container input[type="checkbox"] {
-    margin-right: 18px;
+    margin-right: 8px;
 }
