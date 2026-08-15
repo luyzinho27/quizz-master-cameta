@@ -2374,19 +2374,25 @@ body.quiz-shield-active .quiz-screenshot-shield {
     gap: 0.25rem;
 }
 
-/* 1. Alinha o checkbox e o rótulo à esquerda na modal de Termos */
+/* 1. Força o alinhamento à esquerda do checkbox dentro da modal de Termos */
 #terms-modal .terms-checkbox-container {
-    width: 100%;                     /* ocupa toda a largura do modal */
-    display: flex;                    /* usa flexbox */
-    align-items: center;              /* mantém verticalmente alinhado */
-    justify-content: flex-start;      /* alinha à esquerda */
-    gap: 8px;                         /* espaço opcional entre checkbox e texto */
-    margin: 0;                        /* remove margens centrais */
-    text-align: left;                 /* força alinhamento à esquerda */
-    align-self: flex-start;           /* sobrescreve alinhamento de flex‑parent */
+    /* ocupa toda a largura disponível */
+    width: 100% !important;
+
+    /* usa flexbox para alinhar horizontalmente */
+    display: flex !important;
+    align-items: center !important;          /* mantém verticalmente alinhado */
+    justify-content: flex-start !important;  /* alinha à esquerda */
+
+    /* remove margens que possam centralizar */
+    margin: 0 !important;
+    text-align: left !important;
+
+    /* garante que o flex‑parent não force centralização */
+    align-self: flex-start !important;
 }
 
-/* 2. Espaço entre o checkbox e o texto */
+/* 2. Espaço opcional entre o checkbox e o texto */
 #terms-modal .terms-checkbox-container input[type="checkbox"] {
-    margin-right: 8px;
+    margin-right: 8px !important;
 }
