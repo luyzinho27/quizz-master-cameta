@@ -2386,5 +2386,5 @@ body.quiz-shield-active .quiz-screenshot-shield {
 
 /* 2. Espaço entre o checkbox e o texto */
 #terms-modal .terms-checkbox-container input[type="checkbox"] {
-    margin-right: 8px;
+    margin-right: 18px;
 }
