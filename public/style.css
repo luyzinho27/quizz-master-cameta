@@ -2376,5 +2376,5 @@ body.quiz-shield-active .quiz-screenshot-shield {
 
 /* 1. Alinha o checkbox e o rótulo à direita na modal de Termos */
 #terms-checkbox {
-    width: 0;
+    width: 10%;
 }
