@@ -2373,3 +2373,15 @@ body.quiz-shield-active .quiz-screenshot-shield {
     justify-content: center;
     gap: 0.25rem;
 }
+
+/* Alinha o checkbox e o rótulo à esquerda na modal de Termos */
+.terms-checkbox-container {
+    display: flex;
+    align-items: center;          /* mantém verticalmente alinhado */
+    justify-content: flex-start; /* alinha à esquerda */
+    gap: 8px;                     /* espaço opcional entre checkbox e texto */
+}
+
+.terms-checkbox-container input[type="checkbox"] {
+    margin-right: 8px;            /* espaço entre o checkbox e o texto */
+}
