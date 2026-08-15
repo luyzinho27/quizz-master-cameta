@@ -2200,6 +2200,39 @@ body.quiz-shield-active .quiz-screenshot-shield {
     transition: all 0.3s ease;
 }
 
+/* Modal de Termos de Uso */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+.modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: var(--border-radius);
+    max-width: 600px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+.modal-header h2 {
+    margin-bottom: 1rem;
+}
+.modal-body {
+    margin-bottom: 1rem;
+}
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
 .ranking-list:empty::before {
     content: "Carregando...";
     display: block;

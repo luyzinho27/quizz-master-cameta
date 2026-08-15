@@ -1122,19 +1122,22 @@ const loginTab = document.getElementById('login-tab');
             return;
         }
 
-        // Verificar se já existe administrador
-        if (userType === 'admin') {
-            checkAdminExists().then(adminExists => {
-                if (adminExists) {
-                    showError('register-error', 'Já existe um administrador cadastrado. Não é possível criar outro.');
-                    return;
-                } else {
-                    registerUser(name, email, password, userType);
-                }
-            });
-        } else {
-            registerUser(name, email, password, userType);
-        }
+        // Show terms modal before proceeding with registration
+        showTermsModal(() => {
+            // Verificar se já existe administrador
+            if (userType === 'admin') {
+                checkAdminExists().then(adminExists => {
+                    if (adminExists) {
+                        showError('register-error', 'Já existe um administrador cadastrado. Não é possível criar outro.');
+                        return;
+                    } else {
+                        registerUser(name, email, password, userType);
+                    }
+                });
+            } else {
+                registerUser(name, email, password, userType);
+            }
+        });
     });
 
     // Recuperação de senha
@@ -1158,7 +1161,9 @@ const loginTab = document.getElementById('login-tab');
     // Login com Google
     if (googleLoginBtn) {
         googleLoginBtn.addEventListener('click', () => {
-            signInWithGoogle();
+            showTermsModal(() => {
+                signInWithGoogle();
+            });
         });
     }
 
@@ -1637,6 +1642,49 @@ function initEventListeners() {
     window.addEventListener('beforeunload', handleQuizBeforeUnload);
     window.addEventListener('pagehide', handleQuizBeforeUnload);
 }
+
+// ---------- Terms of Use Modal Logic ----------
+// Show the terms modal and execute a callback once the user accepts.
+function showTermsModal(callback) {
+    const modal = document.getElementById('terms-modal');
+    const acceptBtn = document.getElementById('terms-accept');
+    const closeBtn = document.getElementById('terms-close');
+    const checkbox = document.getElementById('terms-checkbox');
+    if (!modal || !acceptBtn || !closeBtn || !checkbox) return;
+
+    // Reset state
+    acceptBtn.disabled = true;
+    checkbox.checked = false;
+    modal.classList.remove('hidden');
+
+    const onAccept = () => {
+        modal.classList.add('hidden');
+        acceptBtn.removeEventListener('click', onAccept);
+        closeBtn.removeEventListener('click', onClose);
+        checkbox.removeEventListener('change', onCheck);
+        if (typeof callback === 'function') callback();
+    };
+    const onClose = () => {
+        modal.classList.add('hidden');
+        acceptBtn.removeEventListener('click', onAccept);
+        closeBtn.removeEventListener('click', onClose);
+        checkbox.removeEventListener('change', onCheck);
+    };
+    const onCheck = () => {
+        acceptBtn.disabled = !checkbox.checked;
+    };
+
+    acceptBtn.addEventListener('click', onAccept);
+    closeBtn.addEventListener('click', onClose);
+    checkbox.addEventListener('change', onCheck);
+}
+
+// Modify register form submission to enforce terms acceptance
+// Find the existing submit handler and replace it with a wrapper
+// that shows the terms modal before proceeding.
+// We locate the handler by searching for the registerForm.addEventListener block.
+// The following patch replaces the entire block.
+//*** End Patch
 
 function initTabNavigation() {
     safeOn('quizzes-tab', 'click', () => {

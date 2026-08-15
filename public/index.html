@@ -106,7 +106,32 @@
             <div class="auth-footer">
                 <p>&copy; 2025 QuizMaster. Todos os direitos reservados.</p>
             </div>
-        </div>
+            </div>
+            <!-- Modal de Termos de Uso -->
+            <div id="terms-modal" class="modal hidden">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h2>Termos de Uso e Política de Dados</h2>
+                        <button id="terms-close" class="btn btn-secondary" aria-label="Fechar modal">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <p>Ao criar uma conta no QuizMaster, você concorda com os seguintes termos de uso e política de dados:</p>
+                        <ul>
+                            <li>O aplicativo é destinado a fins educacionais e não pode ser usado para fins comerciais sem autorização.</li>
+                            <li>Os dados de usuários são armazenados no Firebase e são usados apenas para autenticação e para registrar progresso em quizzes.</li>
+                            <li>Qualquer questão inserida fica armazenada no banco de questões e pode ser acessada por outros usuários, contribuindo para a comunidade.</li>
+                            <li>O desenvolvedor não se responsabiliza por perdas de dados ou interrupções de serviço.</li>
+                        </ul>
+                        <div class="input-group" style="margin-top:1rem;">
+                            <input type="checkbox" id="terms-checkbox">
+                            <label for="terms-checkbox">Concordo com os termos de uso e política de dados.</label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button id="terms-accept" class="btn btn-primary" disabled>Concordar</button>
+                    </div>
+                </div>
+            </div>
     </div>
 
     <!-- Dashboard do Aluno -->

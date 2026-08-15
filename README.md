@@ -185,3 +185,22 @@ $env:NODE_OPTIONS='--use-system-ca'
 ## Autor
 
 Desenvolvido por Luiz Sérgio Garcia Carvalho.
+
+## Legal e Termos de Uso
+
+### Direitos Autorais
+Todo o conteúdo, código, imagens e recursos deste projeto são protegidos por leis de direitos autorais. O uso, cópia ou distribuição não autorizada pode resultar em sanções legais.
+
+### Regras de Segurança
+O projeto utiliza Firebase Authentication e Cloud Firestore com regras de segurança configuradas em `firestore.rules`. É responsabilidade dos administradores manter as regras atualizadas e garantir que apenas usuários autorizados tenham acesso a dados sensíveis.
+
+### Termos de Uso
+Ao utilizar o QuizMaster, você concorda com os seguintes termos:
+
+1. **Uso Responsável** – O aplicativo é destinado a fins educacionais. O uso indevido pode resultar em bloqueio de conta.
+2. **Privacidade** – Os dados pessoais são armazenados no Firebase e são usados apenas para fins de autenticação e para melhorar a experiência do usuário.
+3. **Colaboração** – Cada questão inserida fica armazenada no banco de questões e pode ser acessada por outros usuários, contribuindo para a comunidade.
+4. **Responsabilidade** – O desenvolvedor não se responsabiliza por perdas de dados ou interrupções de serviço.
+
+### Política de Dados
+Os dados de usuários são coletados apenas para fins de autenticação e para armazenar progresso em quizzes. Nenhum dado sensível é compartilhado com terceiros sem consentimento explícito.
