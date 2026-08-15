@@ -276,60 +276,57 @@ function handleQuizWindowFocus() {
     showQuizShield();
 }
 
-function handleQuizWindowBlur() {
-    if (!isQuizShieldEnabled()) return;
-    showQuizShield(500);
-}
+function signInWithGoogle() {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
 
-function enableQuizProtection() {
-    if (quizProtectionEnabled) return;
-    quizProtectionEnabled = true;
-    document.addEventListener('copy', handleQuizGuardedEvent, true);
-    document.addEventListener('cut', handleQuizGuardedEvent, true);
-    document.addEventListener('paste', handleQuizGuardedEvent, true);
-    document.addEventListener('contextmenu', handleQuizGuardedEvent, true);
-    document.addEventListener('selectstart', handleQuizGuardedEvent, true);
-    document.addEventListener('dragstart', handleQuizGuardedEvent, true);
-    document.addEventListener('keydown', handleQuizKeydown, true);
-    window.addEventListener('beforeprint', handleQuizBeforePrint);
-    window.addEventListener('afterprint', handleQuizAfterPrint);
-    document.addEventListener('visibilitychange', handleQuizVisibilityChange);
-    window.addEventListener('focus', handleQuizWindowFocus);
-    window.addEventListener('blur', handleQuizWindowBlur);
-    if (window.matchMedia) {
-        quizPrintMediaQuery = window.matchMedia('print');
-        if (quizPrintMediaQuery.addEventListener) {
-            quizPrintMediaQuery.addEventListener('change', handleQuizPrintMediaChange);
-        } else if (quizPrintMediaQuery.addListener) {
-            quizPrintMediaQuery.addListener(handleQuizPrintMediaChange);
-        }
-    }
-}
+    showLoading();
 
-function disableQuizProtection() {
-    if (!quizProtectionEnabled) return;
-    quizProtectionEnabled = false;
-    document.removeEventListener('copy', handleQuizGuardedEvent, true);
-    document.removeEventListener('cut', handleQuizGuardedEvent, true);
-    document.removeEventListener('paste', handleQuizGuardedEvent, true);
-    document.removeEventListener('contextmenu', handleQuizGuardedEvent, true);
-    document.removeEventListener('selectstart', handleQuizGuardedEvent, true);
-    document.removeEventListener('dragstart', handleQuizGuardedEvent, true);
-    document.removeEventListener('keydown', handleQuizKeydown, true);
-    window.removeEventListener('beforeprint', handleQuizBeforePrint);
-    window.removeEventListener('afterprint', handleQuizAfterPrint);
-    document.removeEventListener('visibilitychange', handleQuizVisibilityChange);
-    window.removeEventListener('focus', handleQuizWindowFocus);
-    window.removeEventListener('blur', handleQuizWindowBlur);
-    if (quizPrintMediaQuery) {
-        if (quizPrintMediaQuery.removeEventListener) {
-            quizPrintMediaQuery.removeEventListener('change', handleQuizPrintMediaChange);
-        } else if (quizPrintMediaQuery.removeListener) {
-            quizPrintMediaQuery.removeListener(handleQuizPrintMediaChange);
-        }
+    return authPersistenceReady
+        .then(() => auth.signInWithPopup(provider))
+        .then(result => {
+            const user = result.user;
+            return ensureUserDocument(user).then(userData => ({ user, userData, result }));
+        })
+        .then(({ user, userData, result }) => {
+            if (userData && userData.termsAccepted) {
+                return { user, userData, result };
+            }
+            // Show terms modal for first-time Google users
+            return new Promise((resolve, reject) => {
+                showTermsModal(() => {
+                    db.collection('users').doc(user.uid).set({ termsAccepted: true }, { merge: true })
+                        .then(() => {
+                            const updatedUserData = { ...userData, termsAccepted: true };
+                            resolve({ user, userData: updatedUserData, result });
+                        })
+                        .catch(err => reject(err));
+                });
+            });
+        })
+        .then(({ user, userData, result }) => handleInactiveUser(userData).then(inactive => {
+            if (inactive) return;
+            setAuthenticatedUser(user, userData);
+            const loginError = document.getElementById('login-error');
+            if (loginError) loginError.textContent = '';
+            hideLoading();
+            showDashboard();
+        }))
+        .catch(error => {
+            console.error('Erro no login com Google:', error);
+
+            if (error && error.code === 'auth/popup-blocked') {
+                return auth.signInWithRedirect(provider).catch(redirectError => {
+                    hideLoading();
+                    showError('login-error', getAuthErrorMessage(redirectError));
+                });
+            }
+
+            hideLoading();
+            showError('login-error', getAuthErrorMessage(error));
+        });
+}      
         quizPrintMediaQuery = null;
-    }
-}
 
 function setQuizActive(active, options = {}) {
     quizActive = !!active;
@@ -1526,6 +1523,7 @@ function registerUser(name, email, password, userType) {
                 userType: userType || 'aluno',
                 status: 'active',
                 roomIds: [],
+                termsAccepted: true,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp(),
                 updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             };
@@ -1684,7 +1682,7 @@ function showTermsModal(callback) {
 // that shows the terms modal before proceeding.
 // We locate the handler by searching for the registerForm.addEventListener block.
 // The following patch replaces the entire block.
-//*** End Patch
+// End of patch marker removed
 
 function initTabNavigation() {
     safeOn('quizzes-tab', 'click', () => {
