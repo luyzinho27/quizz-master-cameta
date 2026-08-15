@@ -27,6 +27,26 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// Lista de domínios descartáveis
+const disposableDomains = [
+  'mailinator.com', 'trashmail.com', '10minutemail.com',
+  'guerrillamail.com', 'temp-mail.org', 'dispostable.com',
+  'maildrop.cc', 'yopmail.com', 'sharklasers.com',
+  'maildrop.io', 'mailinator.net', 'maildrop.org'
+];
+
+// Valida sintaxe de e‑mail
+function isValidEmail(email) {
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return re.test(email);
+}
+
+// Verifica se domínio está na lista de descartáveis
+function isDisposableEmail(email) {
+  const domain = email.split('@')[1]?.toLowerCase();
+  return !!domain && disposableDomains.includes(domain);
+}
+
 // Configurar persistência de sessão
 const authPersistenceReady = auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .catch((error) => {
@@ -1511,6 +1531,18 @@ function handleInactiveUser(userData, errorElementId = 'login-error') {
 }
 
 function registerUser(name, email, password, userType) {
+    // Valida sintaxe de e‑mail
+  if (!isValidEmail(email)) {
+    showError('register-error', 'E‑mail inválido.');
+    return;
+  }
+
+  // Valida e‑mail descartável
+  if (isDisposableEmail(email)) {
+    showError('register-error', 'E‑mail temporário não é permitido.');
+    return;
+  }
+    
     showLoading();
 
     return authPersistenceReady
